@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Analysis - Mood Analysis App</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .tabs {
+            display: flex;
+            margin-bottom: 30px;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 15px 20px;
+            background: #f7fafc;
+            border: none;
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            text-align: center;
+            color: #4a5568;
+        }
+        
+        .tab:hover {
+            background: #edf2f7;
+        }
+        
+        .tab.active {
+            background: #4299e1;
+            color: white;
+        }
+        
+        .audio-section {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        
+        .audio-section h3 {
+            color: #2d3748;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: #4299e1;
+            color: white;
+            text-decoration: none;
+            border-radius: 25px;
+            font-weight: 600;
+            margin: 10px 5px;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .btn:hover {
+            background: #3182ce;
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .file-upload {
+            border: 2px dashed #cbd5e0;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            margin: 20px 0;
+            transition: border-color 0.3s ease;
+        }
+        
+        .file-upload:hover {
+            border-color: #4299e1;
+        }
+        
+        .file-upload input[type="file"] {
+            display: none;
+        }
+        
+        .recording-controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-weight: 600;
+        }
+        
+        .status.recording {
+            background: #fed7d7;
+            color: #c53030;
+        }
+        
+        .status.success {
+            background: #c6f6d5;
+            color: #2f855a;
+        }
+        
+        .status.error {
+            background: #fed7d7;
+            color: #c53030;
+        }
+        
+        .results {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        
+        .results h4 {
+            color: #2d3748;
+            margin-bottom: 15px;
+        }
+        
+        .result-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎵 Audio Analysis</h1>
+            <p>Analyze emotions from speech and audio recordings</p>
+        </div>
+        
+        <div class="tabs">
+            <a href="/" class="tab">🏠 Home</a>
+            <a href="/audio" class="tab active">🎵 Audio Analysis</a>
+            <a href="/video" class="tab">🎥 Video Analysis</a>
+        </div>
+        
+        <!-- Real-time Recording Section -->
+        <div class="audio-section">
+            <h3>🎤 Real-time Recording</h3>
+            <p>Record your voice for immediate emotion analysis</p>
+            
+            <div class="recording-controls">
+                <button id="startRecord" class="btn">🎤 Start Recording</button>
+                <button id="stopRecord" class="btn" disabled>⏹️ Stop Recording</button>
+            </div>
+            
+            <div id="recordingStatus" class="status" style="display: none;"></div>
+            <div id="recordingResults" class="results" style="display: none;"></div>
+        </div>
+        
+        <!-- File Upload Section -->
+        <div class="audio-section">
+            <h3>📁 Upload Audio File</h3>
+            <p>Upload an audio file for analysis (MP3, WAV, M4A supported)</p>
+            
+            <div class="file-upload">
+                <input type="file" id="audioFile" accept="audio/*">
+                <label for="audioFile" style="cursor: pointer;">
+                    <div>📁 Click to select audio file</div>
+                    <div style="color: #718096; margin-top: 10px;">Supported formats: MP3, WAV, M4A, OGG</div>
+                </label>
+            </div>
+            
+            <div style="text-align: center;">
+                <button id="uploadBtn" class="btn" disabled>🔍 Analyze Audio</button>
+            </div>
+            
+            <div id="uploadStatus" class="status" style="display: none;"></div>
+            <div id="uploadResults" class="results" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+
+        // Recording functionality
+        document.getElementById('startRecord').addEventListener('click', async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                
+                audioChunks = [];
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+                
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    await analyzeRecording(audioBlob);
+                };
+                
+                mediaRecorder.start();
+                isRecording = true;
+                
+                document.getElementById('startRecord').disabled = true;
+                document.getElementById('stopRecord').disabled = false;
+                
+                const statusDiv = document.getElementById('recordingStatus');
+                statusDiv.textContent = '🔴 Recording in progress...';
+                statusDiv.className = 'status recording';
+                statusDiv.style.display = 'block';
+                
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+                showStatus('recordingStatus', 'Error accessing microphone', 'error');
+            }
+        });
+
+        document.getElementById('stopRecord').addEventListener('click', () => {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                
+                isRecording = false;
+                document.getElementById('startRecord').disabled = false;
+                document.getElementById('stopRecord').disabled = true;
+                
+                showStatus('recordingStatus', '⏳ Processing audio...', 'recording');
+            }
+        });
+
+        // File upload functionality
+        document.getElementById('audioFile').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            document.getElementById('uploadBtn').disabled = !file;
+        });
+
+        document.getElementById('uploadBtn').addEventListener('click', async () => {
+            const fileInput = document.getElementById('audioFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showStatus('uploadStatus', 'Please select a file first', 'error');
+                return;
+            }
+            
+            showStatus('uploadStatus', '⏳ Analyzing audio file...', 'recording');
+            
+            const formData = new FormData();
+            formData.append('audio_file', file);
+            
+            try {
+                const response = await fetch('/analyze_audio', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showStatus('uploadStatus', '✅ Analysis completed!', 'success');
+                    displayResults('uploadResults', result.result);
+                } else {
+                    showStatus('uploadStatus', `❌ Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus('uploadStatus', `❌ Error: ${error.message}`, 'error');
+            }
+        });
+
+        async function analyzeRecording(audioBlob) {
+            try {
+                // Convert blob to base64 for sending
+                const reader = new FileReader();
+                reader.onload = async () => {
+                    const base64Audio = reader.result.split(',')[1];
+                    
+                    const response = await fetch('/analyze_audio', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            recording_data: base64Audio
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        showStatus('recordingStatus', '✅ Analysis completed!', 'success');
+                        displayResults('recordingResults', result.result);
+                    } else {
+                        showStatus('recordingStatus', `❌ Error: ${result.error}`, 'error');
+                    }
+                };
+                reader.readAsDataURL(audioBlob);
+                
+            } catch (error) {
+                showStatus('recordingStatus', `❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        function showStatus(elementId, message, type) {
+            const statusDiv = document.getElementById(elementId);
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+        }
+
+        function displayResults(elementId, results) {
+            const resultsDiv = document.getElementById(elementId);
+            
+            let html = '<h4>📊 Analysis Results</h4>';
+            
+            if (results.transcription) {
+                html += `<div class="result-item"><strong>📝 Transcription:</strong> ${results.transcription}</div>`;
+            }
+            
+            if (results.emotion_analysis) {
+                html += `<div class="result-item"><strong>😊 Emotion:</strong> ${results.emotion_analysis}</div>`;
+            }
+            
+            if (results.sentiment) {
+                html += `<div class="result-item"><strong>💭 Sentiment:</strong> ${results.sentiment}</div>`;
+            }
+            
+            if (results.confidence) {
+                html += `<div class="result-item"><strong>🎯 Confidence:</strong> ${(results.confidence * 100).toFixed(1)}%</div>`;
+            }
+            
+            resultsDiv.innerHTML = html;
+            resultsDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>

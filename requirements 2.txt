@@ -1,0 +1,32 @@
+# --- Core app ---
+streamlit>=1.33.0
+pandas>=2.2.2
+numpy<2.0
+opencv-python>=4.9.0.80
+python-dotenv>=1.0.1
+watchdog>=4.0.1        # hot-reload stability
+
+# --- Visualizations & analytics ---
+altair>=5.3,<6         # charts used in the UI
+pillow>=10.4.0         # image ops for datasets
+
+# --- Dataset loaders / ML utils ---
+scipy>=1.13.1          # .mat landmark files
+scikit-learn>=1.5.2    # PCA + KMeans
+
+# --- Optional: Audio mood analyzers ---
+openai>=1.40.0         # Whisper API client
+transformers>=4.43.3   # sentiment pipeline
+torch>=2.2.0           # required by transformers/pyannote
+google-generativeai>=0.7.2  # Gemini SDK
+pyannote.audio>=3.1.1  # speaker diarization (requires HF token)
+
+# --- WebRTC & Real-time Audio ---
+streamlit-webrtc>=0.47.0    # real-time video/audio streaming
+# webrtcvad>=2.0.10           # voice activity detection (requires Xcode tools)
+soundfile>=0.12.1           # audio file I/O for processing
+# --- Real-time audio processing ---
+streamlit-webrtc>=0.50.0  # WebRTC audio streaming
+webrtcvad>=2.0.10      # Voice activity detection
+soundfile>=0.12.1      # Audio file I/O
+av>=10.0.0             # PyAV for audio/video processing

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎵 VoiceVibe - AI Audio Mood Analyzer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎵 VoiceVibe</h1>
+            <p>AI-Powered Audio Mood & Speaker Analysis</p>
+        </div>
+        
+        <div class="upload-section">
+            <form method="post" enctype="multipart/form-data" class="upload-form" id="uploadForm">
+                <div class="file-input-wrapper" id="fileInputWrapper">
+                    <input type="file" name="audio" accept=".mp3,.wav,.m4a,.flac,.ogg" required class="file-input" id="audioInput">
+                    <div class="file-input-content">
+                        <div class="file-icon">🎤</div>
+                        <div class="file-text" id="fileText">Click or drag your audio file here</div>
+                        <div class="file-formats">Supports MP3, WAV, M4A, FLAC, OGG</div>
+                    </div>
+                </div>
+                
+                <div class="checkbox-wrapper">
+                    <input type="checkbox" id="diarize" name="diarize" {{ 'checked' if diarize or enable_diarization }}>
+                    <label for="diarize">🗣️ Enable Speaker Separation (identifies different voices)</label>
+                </div>
+                
+                <button type="submit" class="analyze-btn" id="analyzeBtn">🔍 Analyze Audio</button>
+            </form>
+            
+            {% if file_info %}
+                <div class="file-info">
+                    <h3>📁 File Information</h3>
+                    <p><strong>Name:</strong> {{ file_info.filename }}</p>
+                    <p><strong>Size:</strong> {{ file_info.size_formatted }}</p>
+                    <p><strong>Format:</strong> {{ file_info.extension.upper() }}</p>
+                </div>
+            {% endif %}
+        </div>
+        
+        {% if error %}
+            <div class="error">
+                ❌ {{ error }}
+            </div>
+        {% endif %}
+        
+        {% if result %}
+            <div class="results">
+                <div class="result-section">
+                    <h2>📝 Transcript</h2>
+                    <div class="transcript">{{ result.transcript }}</div>
+                </div>
+                
+                <div class="result-section">
+                    <h2>🎭 Emotional Analysis</h2>
+                    <div class="emotion-grid">
+                        <div class="emotion-primary">
+                            <strong>Primary Emotion:</strong>
+                            <div class="emotion-tag primary-emotion">{{ result.primary_emotion }}</div>
+                            {% if result.secondary_emotions %}
+                                <div class="secondary-emotions">
+                                    <strong>Secondary Emotions:</strong>
+                                    <div class="emotion-tags">
+                                        {% for emotion in result.secondary_emotions %}
+                                            <div class="emotion-tag secondary-emotion">{{ emotion }}</div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="mood-primary">
+                            <strong>Overall Mood:</strong>
+                            <div class="mood-label mood-{{ result.mood_category.lower() }}">{{ result.mood_category }}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="analysis-grid">
+                        <div class="analysis-item">
+                            <strong>Energy Level:</strong>
+                            <div class="energy-indicator energy-{{ result.energy_level.lower() }}">{{ result.energy_level }}</div>
+                        </div>
+                        <div class="analysis-item">
+                            <strong>Tone:</strong>
+                            <div class="tone-badge">{{ result.tone }}</div>
+                        </div>
+                        <div class="analysis-item">
+                            <strong>Intensity:</strong>
+                            <div class="intensity-wrapper">
+                                <div class="intensity-bar">
+                                    <div class="intensity-fill" style="width: {{ result.emotional_intensity * 100 }}%"></div>
+                                </div>
+                                <small>{{ "%.0f"|format(result.emotional_intensity * 100) }}%</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% if result.overall_vibe %}
+                        <div class="overall-vibe">
+                            <strong>Overall Vibe:</strong> "{{ result.overall_vibe }}"
+                        </div>
+                    {% endif %}
+                    
+                    {% if result.key_phrases %}
+                        <div class="key-phrases">
+                            <strong>Key Emotional Phrases:</strong>
+                            <div class="phrase-tags">
+                                {% for phrase in result.key_phrases %}
+                                    <span class="key-phrase">"{{ phrase }}"</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endif %}
+                    
+                    {% if result.stress_indicators %}
+                        <div class="stress-indicators">
+                            <strong>Stress Indicators:</strong>
+                            <div class="stress-tags">
+                                {% for indicator in result.stress_indicators %}
+                                    <span class="stress-indicator">⚠️ {{ indicator }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endif %}
+                    
+                    <div class="confidence-section">
+                        <strong>Analysis Confidence: {{ "%.1f"|format(result.confidence * 100) }}%</strong>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" style="width: {{ result.confidence * 100 }}%"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="explanation">
+                        <strong>Detailed Analysis:</strong> {{ result.explanation }}
+                    </div>
+                </div>
+                
+                {% if diarization %}
+                    <div class="result-section">
+                        <h2>🗣️ Speaker Timeline</h2>
+                        {% if diarization == 'not_available' %}
+                            <div class="diarization-unavailable">
+                                <p>⚠️ Speaker diarization requires pyannote.audio and HuggingFace token configuration.</p>
+                                <p>To enable this feature:</p>
+                                <ol>
+                                    <li>Install pyannote.audio: <code>pip install pyannote.audio</code></li>
+                                    <li>Get a HuggingFace token from <a href="https://huggingface.co/settings/tokens" target="_blank">here</a></li>
+                                    <li>Set environment variable: <code>HF_TOKEN=your_token_here</code></li>
+                                </ol>
+                            </div>
+                        {% else %}
+                            <div class="speaker-timeline">
+                                {% for turn in diarization %}
+                                    <div class="speaker-segment">
+                                        <div class="speaker-time">{{ "%.1f"|format(turn['start']) }}s - {{ "%.1f"|format(turn['end']) }}s</div>
+                                        <div class="speaker-label">{{ turn['speaker'] }}</div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+    
+    <footer class="footer">
+        <p>Built with ❤️ using Flask, OpenAI Whisper, and modern web technologies</p>
+    </footer>
+    
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

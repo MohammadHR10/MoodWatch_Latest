@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Multimodal Emotion Analyzer</title>
+  <link rel="stylesheet" href="/static/css/style.css?v=20251024" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div class="app-container">
+      <header class="app-header">
+        <div class="brand">
+          <img src="/static/images/logo.svg" alt="Logo" onerror="this.style.display='none'" />
+          <h1>Multimodal Emotion Analyzer</h1>
+        </div>
+        <div class="status-badges">
+          <span id="uiVersion" class="badge">UI v20251025.1</span>
+          <span id="backendBadge" class="badge badge-info" title="Face analysis backend">Backend: —</span>
+          <span id="serverStatus" class="badge badge-idle">Idle</span>
+          <span id="videoRecBadge" class="badge badge-muted">Video: Stopped</span>
+          <span id="audioRecBadge" class="badge badge-muted">Audio: Stopped</span>
+          <span id="auBadge" class="badge badge-muted" title="Action Units detected in last update">AUs: —</span>
+        </div>
+      </header>
+
+      <main>
+        <div class="tabs">
+          <button class="tab active" data-tab="videoTab">Video</button>
+          <button class="tab" data-tab="audioTab">Audio</button>
+        </div>
+
+        <section id="videoTab" class="tab-panel active">
+          <div class="grid two">
+            <div class="card">
+              <div class="card-header">
+                <h2>Live Video Stream</h2>
+              </div>
+              <div class="card-body">
+                <div class="video-wrapper">
+                  <img id="serverStream" src="/video_feed" alt="Video Stream" />
+                </div>
+                <div class="controls-row">
+                  <div class="control-group">
+                    <label for="cameraSelect">Camera</label>
+                    <select id="cameraSelect">
+                      <option value="0">Device 0</option>
+                    </select>
+                  </div>
+                  <div class="control-group">
+                    <label for="intervalSeconds">Interval (s)</label>
+                    <input id="intervalSeconds" type="number" min="1" value="10" />
+                  </div>
+                  <div class="control-group">
+                    <label for="pauseSeconds">Pause (s)</label>
+                    <input id="pauseSeconds" type="number" min="0" value="5" />
+                  </div>
+                  <div class="control-group">
+                    <label for="sessionCount">Sessions</label>
+                    <input id="sessionCount" type="number" min="1" value="1" />
+                  </div>
+                </div>
+                <div class="buttons-row">
+                  <button id="startVideoBtn" class="btn primary">Start Video</button>
+                  <button id="stopVideoBtn" class="btn" disabled>Stop</button>
+                  <div class="pill-stats">
+                    <span id="videoTimer" class="pill">00:00</span>
+                    <span id="videoFrames" class="pill" title="Processed frames">0 frames</span>
+                  </div>
+                </div>
+                <div class="progress">
+                  <div id="videoProgress" class="progress-bar" style="width:0%"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h2>Emotion Telemetry</h2>
+              </div>
+              <div class="card-body">
+                <div class="telemetry">
+                  <div>
+                    <div class="label">Emotion</div>
+                    <div id="videoEmotion" class="value">—</div>
+                  </div>
+                  <div>
+                    <div class="label">Confidence</div>
+                    <div class="value"><span id="videoConfidence">—</span></div>
+                  </div>
+                </div>
+                <div class="chart-card">
+                  <canvas id="emotionChart" height="120"></canvas>
+                </div>
+                <div class="chart-card" style="margin-top:10px">
+                  <h3 class="section-subtitle">Emotion (current distribution)</h3>
+                  <canvas id="emotionBars" height="140"></canvas>
+                </div>
+                <div class="chart-card" style="margin-top:10px">
+                  <h3 class="section-subtitle">Emotion scores (live timeline)</h3>
+                  <canvas id="emotionMultiChart" height="140"></canvas>
+                </div>
+                <div class="chart-card" style="margin-top:10px">
+                  <h3 class="section-subtitle">AU timeline (top signals)</h3>
+                  <canvas id="auChart" height="140"></canvas>
+                </div>
+                <div class="card" style="margin-top:12px">
+                  <div class="card-header">
+                    <h3>Session summary</h3>
+                  </div>
+                  <div class="card-body">
+                    <div class="grid two">
+                      <div>
+                        <canvas id="emotionPie" height="160"></canvas>
+                      </div>
+                      <div>
+                        <div class="telemetry">
+                          <div>
+                            <div class="label">Changes</div>
+                            <div id="sumChanges" class="value">—</div>
+                          </div>
+                          <div>
+                            <div class="label">Avg confidence</div>
+                            <div id="sumAvgConf" class="value">—</div>
+                          </div>
+                          <div>
+                            <div class="label">Low-quality</div>
+                            <div id="sumLowQ" class="value">—</div>
+                          </div>
+                          <div>
+                            <div class="label">Total duration</div>
+                            <div id="sumDuration" class="value">—</div>
+                          </div>
+                        </div>
+                        <div class="buttons-row" style="margin-top:8px">
+                          <button id="exportCsvBtn" class="btn">Export CSV</button>
+                        </div>
+                      </div>
+                    </div>
+                    <details class="details" style="margin-top:8px">
+                      <summary>Top segments</summary>
+                      <table class="simple-table" id="segmentsTable">
+                        <thead>
+                          <tr><th>Start</th><th>End</th><th>Emotion</th><th>Duration</th><th>Avg conf</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                      </table>
+                    </details>
+                  </div>
+                </div>
+                <div class="emotion-changes">
+                  <h3 class="section-subtitle">Emotion changes</h3>
+                  <div id="emotionChanges" class="changes-list"></div>
+                </div>
+                <div class="au-breakdown">
+                  <h3 class="section-subtitle">Top Action Units</h3>
+                  <div id="auBars" class="au-bars"></div>
+                </div>
+                <div class="emotion-explain">
+                  <h3 class="section-subtitle">AU-based reasoning</h3>
+                  <div id="emotionReasons" class="reason-list"></div>
+                </div>
+                <div class="session-result" style="margin-top:12px">
+                  <h3 class="section-subtitle">Last session</h3>
+                  <div class="telemetry">
+                    <div>
+                      <div class="label">Dominant</div>
+                      <div id="lastResDominant" class="value">—</div>
+                    </div>
+                    <div>
+                      <div class="label">Faces detected</div>
+                      <div id="lastResFaces" class="value">—</div>
+                    </div>
+                    <div>
+                      <div class="label">AUs detected</div>
+                      <div id="lastResAUs" class="value">—</div>
+                    </div>
+                  </div>
+                  <details class="details">
+                    <summary>Result JSON</summary>
+                    <pre id="lastResultJson" class="code"></pre>
+                  </details>
+                </div>
+                <details class="details">
+                  <summary>Diagnostics</summary>
+                  <div class="controls-row" style="margin:6px 0 8px 0;">
+                    <button id="checkBackendBtn" class="btn">Check Backend</button>
+                    <button id="checkCamerasBtn" class="btn">Check Cameras</button>
+                    <button id="showMacSetupBtn" class="btn">macOS setup</button>
+                  </div>
+                  <pre id="diagOutput" class="code" style="white-space:pre-wrap"></pre>
+                </details>
+                <details class="details">
+                  <summary>Action Units</summary>
+                  <pre id="auDump" class="code"></pre>
+                </details>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="audioTab" class="tab-panel">
+          <div class="grid two">
+            <div class="card">
+              <div class="card-header">
+                <h2>Microphone Recording</h2>
+              </div>
+              <div class="card-body">
+                <div class="controls-row">
+                  <div class="control-group">
+                    <label for="micSelect">Microphone</label>
+                    <select id="micSelect"></select>
+                  </div>
+                  <div class="control-group">
+                    <label for="audioDuration">Duration (s)</label>
+                    <input id="audioDuration" type="number" min="1" value="10" />
+                  </div>
+                </div>
+                <div class="waveform">
+                  <canvas id="audioWave" height="80"></canvas>
+                </div>
+                <div class="buttons-row">
+                  <button id="startAudioBtn" class="btn primary">Start Audio</button>
+                  <button id="stopAudioBtn" class="btn" disabled>Stop</button>
+                  <div class="pill-stats">
+                    <span id="audioTimer" class="pill">00:00</span>
+                    <span id="audioStatus" class="pill">Idle</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h2>Audio Analysis</h2>
+              </div>
+              <div class="card-body">
+                <div class="telemetry">
+                  <div>
+                    <div class="label">Emotion</div>
+                    <div id="audioEmotion" class="value">—</div>
+                  </div>
+                  <div>
+                    <div class="label">Confidence</div>
+                    <div class="value"><span id="audioConfidence">—</span></div>
+                  </div>
+                </div>
+                <details class="details">
+                  <summary>Result JSON</summary>
+                  <pre id="audioResultsContent" class="code"></pre>
+                </details>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="app-footer">
+        <div>© 2025 Emotion Analyzer</div>
+        <div class="links">
+          <a href="/" onclick="location.reload(); return false;">Reload</a>
+        </div>
+      </footer>
+    </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="/static/js/app.js?v=20251025"></script>
+  </body>
+  </html>

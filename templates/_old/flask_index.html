@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mood Analysis App</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            color: #4a5568;
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+        }
+        
+        .header p {
+            color: #718096;
+            font-size: 1.1rem;
+        }
+        
+        .tabs {
+            display: flex;
+            margin-bottom: 30px;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 15px 20px;
+            background: #f7fafc;
+            border: none;
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            text-align: center;
+            color: #4a5568;
+        }
+        
+        .tab:hover {
+            background: #edf2f7;
+        }
+        
+        .tab.active {
+            background: #4299e1;
+            color: white;
+        }
+        
+        .welcome-content {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 40px;
+        }
+        
+        .feature-card {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+            text-align: center;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+        
+        .feature-card h3 {
+            color: #2d3748;
+            margin-bottom: 15px;
+        }
+        
+        .feature-card p {
+            color: #718096;
+            line-height: 1.6;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: #4299e1;
+            color: white;
+            text-decoration: none;
+            border-radius: 25px;
+            font-weight: 600;
+            margin-top: 20px;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .btn:hover {
+            background: #3182ce;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎭 Mood Analysis App</h1>
+            <p>Advanced Audio & Video Emotion Analysis with AI</p>
+        </div>
+        
+        <div class="tabs">
+            <a href="/" class="tab active">🏠 Home</a>
+            <a href="/audio" class="tab">🎵 Audio Analysis</a>
+            <a href="/video" class="tab">🎥 Video Analysis</a>
+        </div>
+        
+        <div class="welcome-content">
+            <h2>Welcome to Advanced Mood Analysis</h2>
+            <p>Analyze emotions and facial expressions using cutting-edge AI technology</p>
+            
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🎵</div>
+                    <h3>Audio Analysis</h3>
+                    <p>Real-time speech emotion recognition with OpenAI Whisper transcription and GPT-powered sentiment analysis</p>
+                    <a href="/audio" class="btn">Start Audio Analysis</a>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">🎥</div>
+                    <h3>Video Analysis</h3>
+                    <p>Advanced facial expression analysis with MediaPipe Action Units detection and real-time emotion tracking</p>
+                    <a href="/video" class="btn">Start Video Analysis</a>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Comprehensive Reports</h3>
+                    <p>Detailed analytics with Action Units, emotion timelines, and confidence scores for professional insights</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">🔬</div>
+                    <h3>Scientific Accuracy</h3>
+                    <p>Built on MediaPipe and OpenAI technologies for research-grade facial analysis and emotion detection</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

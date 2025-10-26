@@ -1,0 +1,1550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Analysis - Mood Analysis App</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .tabs {
+            display: flex;
+            margin-bottom: 30px;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 15px 20px;
+            background: #f7fafc;
+            border: none;
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            text-align: center;
+            color: #4a5568;
+        }
+        
+        .tab:hover {
+            background: #edf2f7;
+        }
+        
+        .tab.active {
+            background: #4299e1;
+            color: white;
+        }
+        
+        .video-section {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        
+        .video-section h3 {
+            color: #2d3748;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .video-feed {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            margin: 20px auto;
+            display: block;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: #4299e1;
+            color: white;
+            text-decoration: none;
+            border-radius: 25px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        
+        .btn:hover:not(:disabled) {
+            background: #3182ce;
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn.record {
+            background: #e53e3e;
+        }
+        
+        .btn.record:hover:not(:disabled) {
+            background: #c53030;
+        }
+        
+        .duration-selector {
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .duration-selector select {
+            padding: 10px 15px;
+            border-radius: 10px;
+            border: 2px solid #e2e8f0;
+            font-size: 1rem;
+            margin-left: 10px;
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-weight: 600;
+            text-align: center;
+        }
+        
+        .status.recording {
+            background: #fed7d7;
+            color: #c53030;
+        }
+        
+        .status.success {
+            background: #c6f6d5;
+            color: #2f855a;
+        }
+        
+        .status.error {
+            background: #fed7d7;
+            color: #c53030;
+        }
+        
+        .progress-container {
+            background: #e2e8f0;
+            border-radius: 10px;
+            height: 20px;
+            margin: 15px 0;
+            overflow: hidden;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: #4299e1;
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 10px;
+        }
+        
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .metric-card {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #4299e1;
+        }
+
+        /* Enhanced Scheduling Controls */
+        .recording-setup {
+            background: #f8fafc;
+            padding: 25px;
+            border-radius: 15px;
+            margin: 20px 0;
+        }
+
+        .schedule-section {
+            margin-bottom: 25px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            border-left: 4px solid #4299e1;
+        }
+
+        .schedule-section h4 {
+            margin: 0 0 15px 0;
+            color: #2d3748;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .time-input-group {
+            margin-bottom: 15px;
+        }
+
+        .time-input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .time-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .time-input {
+            padding: 10px 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            width: 80px;
+            text-align: center;
+        }
+
+        .time-input:focus {
+            outline: none;
+            border-color: #4299e1;
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+        }
+
+        .time-unit {
+            padding: 10px 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            background: white;
+            cursor: pointer;
+        }
+
+        .session-select {
+            padding: 10px 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            background: white;
+            cursor: pointer;
+            width: 200px;
+        }
+
+        .schedule-preview {
+            background: #e6fffa;
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #38b2ac;
+            margin-top: 20px;
+        }
+
+        .schedule-preview h4 {
+            margin: 0 0 10px 0;
+            color: #234e52;
+        }
+
+        .preview-text {
+            color: #285e61;
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+
+        .highlight {
+            background: #b2f5ea;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            color: #234e52;
+        }
+        
+        .metric-label {
+            color: #718096;
+            margin-top: 5px;
+        }
+        
+        .file-upload {
+            border: 2px dashed #cbd5e0;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            margin: 20px 0;
+            transition: border-color 0.3s ease;
+        }
+        
+        .file-upload:hover {
+            border-color: #4299e1;
+        }
+        
+        .file-upload input[type="file"] {
+            display: none;
+        }
+        
+        .session-results {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        
+        .recording-setup {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+            padding: 20px;
+            background: #f7fafc;
+            border-radius: 10px;
+        }
+        
+        .schedule-controls, .interval-controls {
+            text-align: center;
+        }
+        
+        .btn.schedule {
+            background: #38a169;
+        }
+        
+        .btn.schedule:hover:not(:disabled) {
+            background: #2f855a;
+        }
+        
+        .session-info {
+            background: #e6fffa;
+            border: 2px solid #38b2ac;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .realtime-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .metric-card-live {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid #38b2ac;
+        }
+        
+        .metric-value-live {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #38b2ac;
+        }
+        
+        .progress-text {
+            text-align: center;
+            margin-top: 10px;
+            font-weight: 600;
+            color: #4a5568;
+        }
+        
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .emotion-graph {
+            height: 200px;
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 15px;
+            position: relative;
+            overflow-x: auto;
+        }
+        
+        .au-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .au-card {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #4299e1;
+        }
+        
+        .au-section {
+            margin: 25px 0;
+            padding: 20px;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .au-section h6 {
+            color: #2d3748;
+            font-size: 1.1rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 8px;
+        }
+        
+        .au-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+        
+        .stat-card {
+            background: #f0fff4;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid #38a169;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            color: #718096;
+            margin-bottom: 5px;
+        }
+        
+        .stat-value {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #38a169;
+        }
+        
+        .au-name {
+            font-weight: bold;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+        
+        .au-value {
+            font-size: 1.2rem;
+            color: #4299e1;
+            margin-bottom: 5px;
+        }
+        
+        .au-description {
+            font-size: 0.9rem;
+            color: #718096;
+        }
+        
+        .session-summary {
+            background: #edf2f7;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 15px 0;
+        }
+        
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .chart-container h4 {
+            margin-top: 0;
+            color: #2d3748;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 10px;
+        }
+        
+        .emotion-graph {
+            height: 200px;
+            position: relative;
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 15px;
+            overflow-x: auto;
+        }
+        
+        .emotion-point {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: white;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        .emotion-happy { background: #48bb78; }
+        .emotion-content { background: #38b2ac; }
+        .emotion-neutral { background: #a0aec0; }
+        .emotion-concentrated { background: #ed8936; }
+        .emotion-focused { background: #667eea; }
+        
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+        }
+        
+        .summary-item {
+            text-align: center;
+        }
+        
+        .summary-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #4299e1;
+        }
+        
+        .summary-label {
+            color: #718096;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎥 Video Analysis</h1>
+            <p>Advanced facial expression and emotion analysis with MediaPipe</p>
+        </div>
+        
+        <div class="tabs">
+            <a href="/" class="tab">🏠 Home</a>
+            <a href="/audio" class="tab">🎵 Audio Analysis</a>
+            <a href="/video" class="tab active">🎥 Video Analysis</a>
+        </div>
+        
+        <!-- Live Recording Section -->
+        <div class="video-section">
+            <h3>⏰ Scheduled Recording & Analysis</h3>
+            <p>Schedule automatic recording sessions with comprehensive facial analysis</p>
+            
+            <img id="videoFeed" src="/video_feed" class="video-feed" alt="Camera feed">
+            
+            <div class="recording-setup">
+                <div class="schedule-section">
+                    <h4>� Recording Settings</h4>
+                    <div class="time-input-group">
+                        <label for="cameraOnDuration">Recording Duration:</label>
+                        <div class="time-controls">
+                            <input type="number" id="cameraOnDuration" min="1" max="999" value="10" class="time-input">
+                            <select id="cameraOnDurationUnit" class="time-unit">
+                                <option value="seconds" selected>Seconds</option>
+                                <option value="minutes">Minutes</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="time-input-group">
+                        <label for="cameraOffDuration">Pause Between Recordings:</label>
+                        <div class="time-controls">
+                            <input type="number" id="cameraOffDuration" min="0" max="999" value="5" class="time-input">
+                            <select id="cameraOffDurationUnit" class="time-unit">
+                                <option value="seconds" selected>Seconds</option>
+                                <option value="minutes">Minutes</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="schedule-section">
+                    <h4>🔄 Multiple Sessions</h4>
+                    <div class="time-input-group">
+                        <label for="sessionCount">Number of Sessions:</label>
+                        <select id="sessionCount" class="session-select">
+                            <option value="1" selected>1 session</option>
+                            <option value="2">2 sessions</option>
+                            <option value="3">3 sessions</option>
+                            <option value="5">5 sessions</option>
+                            <option value="10">10 sessions</option>
+                            <option value="custom">Custom...</option>
+                        </select>
+                        <input type="number" id="customSessionCount" min="1" max="100" value="1" class="time-input" style="display: none;">
+                    </div>
+                </div>
+
+                <div class="schedule-preview">
+                    <h4>📊 Recording Preview</h4>
+                    <div id="schedulePreview" class="preview-text">
+                        Will record for <span class="highlight">10 seconds</span>, 
+                        then pause for <span class="highlight">5 seconds</span>.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <button id="startSchedule" class="btn schedule">🎬 Start Scheduled Recording</button>
+                <button id="startSingle" class="btn record">🔴 Single Recording</button>
+                <button id="stopRecord" class="btn" disabled>⏹️ Stop Recording</button>
+            </div>
+            
+            <div id="scheduleStatus" class="status" style="display: none;"></div>
+            <div id="recordingStatus" class="status" style="display: none;"></div>
+            <div id="progressContainer" class="progress-container" style="display: none;">
+                <div id="progressBar" class="progress-bar"></div>
+                <div id="progressText" class="progress-text"></div>
+            </div>
+            
+            <div id="currentSession" class="session-info" style="display: none;">
+                <h4>📊 Current Session Analysis</h4>
+                <div id="realtimeMetrics" class="realtime-metrics"></div>
+            </div>
+        </div>
+        
+        <!-- File Upload Section -->
+        <div class="video-section">
+            <h3>📁 Upload Video File</h3>
+            <p>Upload a video file for facial analysis (MP4, AVI, MOV supported)</p>
+            
+            <div class="file-upload">
+                <input type="file" id="videoFile" accept="video/*">
+                <label for="videoFile" style="cursor: pointer;">
+                    <div>📁 Click to select video file</div>
+                    <div style="color: #718096; margin-top: 10px;">Supported formats: MP4, AVI, MOV, WebM</div>
+                </label>
+            </div>
+            
+            <div style="text-align: center;">
+                <button id="uploadBtn" class="btn" disabled>🔍 Analyze Video</button>
+            </div>
+            
+            <div id="uploadStatus" class="status" style="display: none;"></div>
+        </div>
+        
+        <!-- Session Results -->
+        <div class="video-section">
+            <h3>📊 Analysis Sessions & Action Units</h3>
+            <div id="sessionResults" class="session-results">
+                <p style="text-align: center; color: #718096;">No sessions recorded yet. Start recording to see comprehensive Action Units analysis!</p>
+            </div>
+            
+            <!-- Real-time Action Units Chart -->
+            <div id="actionUnitsChart" class="chart-container" style="display: none;">
+                <h4>📈 Real-time Action Units Evolution</h4>
+                <canvas id="auChart" width="800" height="400"></canvas>
+            </div>
+            
+            <!-- Emotion Timeline -->
+            <div id="emotionTimeline" class="chart-container" style="display: none;">
+                <h4>😊 Emotion Timeline</h4>
+                <div id="emotionGraph" class="emotion-graph"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isRecording = false;
+        let isScheduledRunning = false;
+        let currentSchedule = {
+            sessions: 0,
+            completed: 0,
+            total: 1,
+            interval: 10
+        };
+        
+        // Real-time charting variables
+        let auChart = null;
+        let auChartData = [];
+        let emotionTimelineData = [];
+        let realtimeInterval = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadResults();
+            setInterval(updateRecordingStatus, 1000); // Check status every second
+            
+            // Setup enhanced scheduling controls
+            setupSchedulingControls();
+            updateSchedulePreview();
+        });
+
+        // Enhanced scheduling controls setup
+        function setupSchedulingControls() {
+            // Session count custom input handling
+            document.getElementById('sessionCount').addEventListener('change', function() {
+                const customInput = document.getElementById('customSessionCount');
+                if (this.value === 'custom') {
+                    customInput.style.display = 'inline-block';
+                    customInput.focus();
+                } else {
+                    customInput.style.display = 'none';
+                }
+                updateSchedulePreview();
+            });
+
+            // Update preview when any input changes
+            const inputs = [
+                'cameraOnDuration', 'cameraOnDurationUnit', 
+                'cameraOffDuration', 'cameraOffDurationUnit',
+                'sessionCount', 'customSessionCount'
+            ];
+
+            inputs.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.addEventListener('change', updateSchedulePreview);
+                    element.addEventListener('input', updateSchedulePreview);
+                }
+            });
+        }
+
+        function updateSchedulePreview() {
+            const cameraOnDuration = parseInt(document.getElementById('cameraOnDuration').value) || 10;
+            const cameraOnUnit = document.getElementById('cameraOnDurationUnit').value;
+            
+            const cameraOffDuration = parseInt(document.getElementById('cameraOffDuration').value) || 5;
+            const cameraOffUnit = document.getElementById('cameraOffDurationUnit').value;
+            
+            const sessionCountSelect = document.getElementById('sessionCount').value;
+            const customSessionCount = parseInt(document.getElementById('customSessionCount').value) || 1;
+            const totalSessions = sessionCountSelect === 'custom' ? customSessionCount : parseInt(sessionCountSelect);
+
+            let previewText = `Will record for <span class="highlight">${cameraOnDuration} ${cameraOnUnit}</span>`;
+            
+            if (cameraOffDuration > 0) {
+                previewText += `, then pause for <span class="highlight">${cameraOffDuration} ${cameraOffUnit}</span>`;
+            }
+            
+            if (totalSessions > 1) {
+                previewText += `<br>Repeating for <span class="highlight">${totalSessions} sessions</span>`;
+            }
+
+            document.getElementById('schedulePreview').innerHTML = previewText;
+        }
+
+        function convertToSeconds(value, unit) {
+            switch(unit) {
+                case 'seconds': return value;
+                case 'minutes': return value * 60;
+                case 'hours': return value * 3600;
+                default: return value;
+            }
+        }
+
+        function formatDuration(seconds) {
+            if (seconds < 60) return `${seconds}s`;
+            if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+            return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+        }
+
+        // Simplified Scheduled recording functionality
+        document.getElementById('startSchedule').addEventListener('click', async () => {
+            if (isScheduledRunning) return;
+            
+            // Get values from simplified controls
+            const cameraOnDuration = parseInt(document.getElementById('cameraOnDuration').value) || 10;
+            const cameraOnUnit = document.getElementById('cameraOnDurationUnit').value;
+            
+            const cameraOffDuration = parseInt(document.getElementById('cameraOffDuration').value) || 5;
+            const cameraOffUnit = document.getElementById('cameraOffDurationUnit').value;
+            
+            const sessionCountSelect = document.getElementById('sessionCount').value;
+            const customSessionCount = parseInt(document.getElementById('customSessionCount').value) || 1;
+            const totalSessions = sessionCountSelect === 'custom' ? customSessionCount : parseInt(sessionCountSelect);
+
+            // Convert to seconds
+            const cameraOnSeconds = convertToSeconds(cameraOnDuration, cameraOnUnit);
+            const cameraOffSeconds = convertToSeconds(cameraOffDuration, cameraOffUnit);
+            
+            currentSchedule = {
+                sessions: 0,
+                completed: 0,
+                total: totalSessions,
+                cameraOnSeconds: cameraOnSeconds,
+                cameraOffSeconds: cameraOffSeconds
+            };
+            
+            isScheduledRunning = true;
+            document.getElementById('startSchedule').disabled = true;
+            document.getElementById('startSingle').disabled = true;
+            
+            showScheduleStatus(`🎬 Starting ${totalSessions} recording sessions`, 'recording');
+            
+            // Start the simple scheduled session sequence
+            await runSimpleScheduledSessions();
+        });
+
+        async function runScheduledSessions() {
+            for (let i = 0; i < currentSchedule.total; i++) {
+                currentSchedule.sessions = i + 1;
+                
+                showScheduleStatus(`📹 Session ${currentSchedule.sessions}/${currentSchedule.total} - Starting recording...`, 'recording');
+                
+                // Start recording and wait for completion
+                await startSingleRecordingAndWait(currentSchedule.duration);
+                
+                currentSchedule.completed++;
+                
+                // Wait for interval before next session (except for last session)
+                if (i < currentSchedule.total - 1) {
+                    showScheduleStatus(`⏳ Waiting ${currentSchedule.interval}s before next session...`, 'recording');
+                    await sleep(currentSchedule.interval * 1000);
+                }
+            }
+            
+            // Complete scheduled sessions
+            isScheduledRunning = false;
+            document.getElementById('startSchedule').disabled = false;
+            document.getElementById('startSingle').disabled = false;
+            
+            showScheduleStatus(`✅ Scheduled recording completed! ${currentSchedule.total} sessions analyzed`, 'success');
+            loadResults();
+        }
+
+        async function runSimpleScheduledSessions() {
+            for (let sessionIndex = 0; sessionIndex < currentSchedule.total; sessionIndex++) {
+                currentSchedule.sessions = sessionIndex + 1;
+                
+                showScheduleStatus(`📹 Session ${currentSchedule.sessions}/${currentSchedule.total} - Recording...`, 'recording');
+                
+                // Record for the specified duration
+                await startSingleRecordingAndWait(currentSchedule.cameraOnSeconds);
+                
+                currentSchedule.completed++;
+                
+                // Pause between sessions (except for last session)
+                if (sessionIndex < currentSchedule.total - 1 && currentSchedule.cameraOffSeconds > 0) {
+                    showScheduleStatus(`⏸️ Pausing for ${formatDuration(currentSchedule.cameraOffSeconds)} before next session...`, 'recording');
+                    await sleep(currentSchedule.cameraOffSeconds * 1000);
+                }
+            }
+            
+            // Complete scheduled sessions
+            isScheduledRunning = false;
+            document.getElementById('startSchedule').disabled = false;
+            document.getElementById('startSingle').disabled = false;
+            
+            showScheduleStatus(`✅ Scheduled recording completed! ${currentSchedule.total} sessions analyzed`, 'success');
+            loadResults();
+        }
+
+        // New function that waits for recording completion
+        async function startSingleRecordingAndWait(duration) {
+            return new Promise(async (resolve) => {
+                try {
+                    const response = await fetch('/start_recording', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ duration: duration })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        isRecording = true;
+                        
+                        // Clear previous real-time data for new recording
+                        auChartData = [];
+                        emotionTimelineData = [];
+                        
+                        document.getElementById('stopRecord').disabled = false;
+                        
+                        showStatus('🔴 Recording in progress...', 'recording');
+                        showProgress();
+                        showCurrentSession();
+                        
+                        // Wait for recording to complete naturally
+                        const checkRecordingStatus = async () => {
+                            try {
+                                const statusResponse = await fetch('/get_recording_status');
+                                const status = await statusResponse.json();
+                                
+                                if (status.recording && status.elapsed < duration) {
+                                    // Still recording, check again in 500ms
+                                    setTimeout(checkRecordingStatus, 500);
+                                } else {
+                                    // Recording completed, stop and process
+                                    if (isRecording) {
+                                        await stopRecording();
+                                    }
+                                    resolve();
+                                }
+                            } catch (error) {
+                                console.error('Error checking recording status:', error);
+                                resolve();
+                            }
+                        };
+                        
+                        // Start checking recording status
+                        checkRecordingStatus();
+                        
+                    } else {
+                        showStatus(`❌ Error: ${result.error}`, 'error');
+                        resolve();
+                    }
+                } catch (error) {
+                    showStatus(`❌ Error: ${error.message}`, 'error');
+                    resolve();
+                }
+            });
+        }
+
+        // Single recording functionality
+        document.getElementById('startSingle').addEventListener('click', async () => {
+            // Get recording duration from the new controls
+            const cameraOnDuration = parseInt(document.getElementById('cameraOnDuration').value) || 10;
+            const cameraOnUnit = document.getElementById('cameraOnDurationUnit').value;
+            const durationInSeconds = convertToSeconds(cameraOnDuration, cameraOnUnit);
+            
+            await startSingleRecording(durationInSeconds);
+        });
+
+        async function startSingleRecording(duration) {
+            try {
+                const response = await fetch('/start_recording', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ duration: duration })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    isRecording = true;
+                    document.getElementById('stopRecord').disabled = false;
+                    
+                    showStatus('🔴 Recording in progress...', 'recording');
+                    showProgress();
+                    showCurrentSession();
+                    
+                    // Auto-stop after duration
+                    setTimeout(() => {
+                        if (isRecording) {
+                            stopRecording();
+                        }
+                    }, duration * 1000);
+                    
+                } else {
+                    showStatus(`❌ Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        document.getElementById('stopRecord').addEventListener('click', stopRecording);
+
+        async function stopRecording() {
+            try {
+                const response = await fetch('/stop_recording', {
+                    method: 'POST'
+                });
+                
+                isRecording = false;
+                document.getElementById('stopRecord').disabled = true;
+                
+                // Hide real-time charts since recording stopped
+                document.getElementById('actionUnitsChart').style.display = 'none';
+                document.getElementById('emotionTimeline').style.display = 'none';
+                
+                hideProgress();
+                hideCurrentSession();
+                showStatus('⏳ Analyzing video with MediaPipe...', 'recording');
+                
+                // Wait for analysis to complete
+                setTimeout(() => {
+                    loadResults();
+                    showStatus('✅ Analysis completed!', 'success');
+                }, 3000);
+                
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        // File upload functionality
+        document.getElementById('videoFile').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            document.getElementById('uploadBtn').disabled = !file;
+        });
+
+        document.getElementById('uploadBtn').addEventListener('click', async () => {
+            const fileInput = document.getElementById('videoFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showStatus('Please select a file first', 'error');
+                return;
+            }
+            
+            showStatus('⏳ Analyzing video file...', 'recording');
+            
+            const formData = new FormData();
+            formData.append('video_file', file);
+            
+            try {
+                const response = await fetch('/upload_video', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showStatus('✅ Analysis completed!', 'success');
+                    loadResults();
+                } else {
+                    showStatus(`❌ Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        });
+
+        async function updateRecordingStatus() {
+            if (!isRecording) return;
+            
+            try {
+                const response = await fetch('/get_recording_status');
+                const status = await response.json();
+                
+                if (status.recording) {
+                    const progress = Math.min(status.progress * 100, 100);
+                    document.getElementById('progressBar').style.width = `${progress}%`;
+                    
+                    const remaining = Math.max(status.duration - status.elapsed, 0);
+                    document.getElementById('progressText').textContent = 
+                        `Recording: ${status.elapsed.toFixed(1)}s / ${status.duration}s (${remaining.toFixed(1)}s remaining)`;
+                    
+                    // Update real-time metrics
+                    updateRealtimeMetrics(status);
+                }
+            } catch (error) {
+                console.error('Error getting recording status:', error);
+            }
+        }
+
+        async function updateRealtimeMetrics(status) {
+            const metricsContainer = document.getElementById('realtimeMetrics');
+            if (!metricsContainer) return;
+            
+            try {
+                // Fetch real-time Action Units data from Flask endpoint
+                const response = await fetch('/get_realtime_data');
+                const realtimeData = await response.json();
+                
+                if (realtimeData.recording && realtimeData.action_units) {
+                    // Display top 6 most active Action Units
+                    const topAUs = Object.entries(realtimeData.action_units)
+                        .sort(([,a], [,b]) => b - a)
+                        .slice(0, 6);
+                    
+                    // Update real-time metrics display
+                    let html = '';
+                    topAUs.forEach(([auName, value]) => {
+                        const displayName = auName.replace('AU', 'AU').replace('_', ' ');
+                        html += `
+                            <div class="metric-card-live">
+                                <div class="metric-value-live">${value.toFixed(3)}</div>
+                                <div class="metric-label">${displayName}</div>
+                            </div>
+                        `;
+                    });
+                    
+                    metricsContainer.innerHTML = html;
+                    
+                    // Update real-time charts
+                    updateRealtimeCharts(realtimeData);
+                    
+                } else {
+                    // Fallback display when not recording
+                    metricsContainer.innerHTML = '<p style="text-align: center; color: #718096;">Start recording to see real-time Action Units</p>';
+                }
+            } catch (error) {
+                console.error('Error fetching real-time data:', error);
+                // Fallback to status-based display
+                const mockAUs = {
+                    'Smile (AU12)': (Math.sin(status.elapsed * 0.5) * 0.3 + 0.5).toFixed(3),
+                    'Brow Raise (AU01)': (Math.cos(status.elapsed * 0.3) * 0.2 + 0.3).toFixed(3),
+                    'Eye Close (AU07)': (Math.random() * 0.4).toFixed(3),
+                    'Jaw Drop (AU26)': (Math.sin(status.elapsed * 0.7) * 0.2 + 0.2).toFixed(3)
+                };
+                
+                let html = '';
+                Object.entries(mockAUs).forEach(([name, value]) => {
+                    html += `
+                        <div class="metric-card-live">
+                            <div class="metric-value-live">${value}</div>
+                            <div class="metric-label">${name}</div>
+                        </div>
+                    `;
+                });
+                
+                metricsContainer.innerHTML = html;
+            }
+        }
+        
+        function updateRealtimeCharts(realtimeData) {
+            // Show real-time charts during recording
+            if (realtimeData.recording) {
+                document.getElementById('actionUnitsChart').style.display = 'block';
+                document.getElementById('emotionTimeline').style.display = 'block';
+                
+                // Store data for charting
+                auChartData.push({
+                    time: realtimeData.elapsed,
+                    ...realtimeData.action_units
+                });
+                
+                emotionTimelineData.push({
+                    time: realtimeData.elapsed,
+                    emotion: realtimeData.emotion
+                });
+                
+                // Update Action Units chart with real-time data
+                updateLiveActionUnitsChart();
+                
+                // Update emotion timeline
+                updateLiveEmotionTimeline();
+            }
+        }
+        
+        function updateLiveActionUnitsChart() {
+            const ctx = document.getElementById('auChart').getContext('2d');
+            
+            if (auChart) {
+                auChart.destroy();
+            }
+            
+            // Show only last 30 seconds of data for better visibility
+            const recentData = auChartData.slice(-30);
+            const labels = recentData.map(d => `${d.time.toFixed(1)}s`);
+            
+            const topAUs = ['AU01_Inner_Brow_Raiser', 'AU06_Cheek_Raiser', 'AU12_Lip_Corner_Puller', 'AU07_Lid_Tightener', 'AU25_Lips_Part'];
+            const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'];
+            
+            const datasets = topAUs.map((auName, index) => ({
+                label: auName.replace('_', ' '),
+                data: recentData.map(d => d[auName] || 0),
+                borderColor: colors[index],
+                backgroundColor: colors[index] + '20',
+                tension: 0.4,
+                fill: false
+            }));
+            
+            auChart = new Chart(ctx, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: {
+                        title: { display: true, text: 'Live Action Units (Last 30s)' }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, max: 1 },
+                        x: { title: { display: true, text: 'Time (seconds)' } }
+                    }
+                }
+            });
+        }
+        
+        function updateLiveEmotionTimeline() {
+            const timeline = document.getElementById('emotionGraph');
+            const recentEmotions = emotionTimelineData.slice(-20);
+            
+            let html = '<div style="display: flex; gap: 5px; align-items: center; flex-wrap: wrap;">';
+            
+            recentEmotions.forEach((data, index) => {
+                const emotionClass = `emotion-${data.emotion.toLowerCase()}`;
+                html += `
+                    <div class="emotion-point ${emotionClass}" title="${data.emotion} at ${data.time.toFixed(1)}s">
+                        ${data.emotion.charAt(0)}
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            timeline.innerHTML = html;
+        }
+
+        async function loadResults() {
+            try {
+                const response = await fetch('/get_results');
+                const data = await response.json();
+                
+                displaySessionResults(data.results);
+                
+                if (data.results && data.results.length > 0) {
+                    showActionUnitsChart(data.results);
+                    showEmotionTimeline(data.results);
+                }
+            } catch (error) {
+                console.error('Error loading results:', error);
+            }
+        }
+
+        function displaySessionResults(results) {
+            const container = document.getElementById('sessionResults');
+            
+            if (!results || results.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #718096;">No sessions recorded yet. Start recording to see comprehensive Action Units analysis!</p>';
+                return;
+            }
+            
+            let html = '';
+            results.reverse().forEach(result => {
+                html += `
+                    <div class="session-item">
+                        <h4>📹 Session ${result.session} - ${result.timestamp}</h4>
+                        
+                        <div class="session-summary">
+                            <div class="summary-grid">
+                                <div class="summary-item">
+                                    <div class="summary-value">${result.frames_processed}</div>
+                                    <div class="summary-label">Frames Analyzed</div>
+                                </div>
+                                <div class="summary-item">
+                                    <div class="summary-value">${result.faces_detected}</div>
+                                    <div class="summary-label">Faces Detected</div>
+                                </div>
+                                <div class="summary-item">
+                                    <div class="summary-value">${result.dominant_emotion}</div>
+                                    <div class="summary-label">Dominant Emotion</div>
+                                </div>
+                                <div class="summary-item">
+                                    <div class="summary-value">${(result.detection_confidence * 100).toFixed(1)}%</div>
+                                    <div class="summary-label">Detection Confidence</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <h5>🎭 Comprehensive Action Units Analysis (17 AUs)</h5>
+                        <div class="au-details">
+                            <!-- Upper Face Action Units -->
+                            <div class="au-section">
+                                <h6>👁️ Upper Face</h6>
+                                <div class="au-grid">
+                                    <div class="au-card">
+                                        <div class="au-name">AU01 - Inner Brow Raiser</div>
+                                        <div class="au-value">${(result.action_units.AU01_Inner_Brow_Raiser || 0).toFixed(3)}</div>
+                                        <div class="au-description">Inner eyebrow raising, surprise</div>
+                                    </div>
+                                    <div class="au-card">
+                                        <div class="au-name">AU02 - Outer Brow Raiser</div>
+                                        <div class="au-value">${(result.action_units.AU02_Outer_Brow_Raiser || 0).toFixed(3)}</div>
+                                        <div class="au-description">Outer eyebrow raising</div>
+                                    </div>
+                                    <div class="au-card">
+                                        <div class="au-name">AU04 - Brow Lowerer</div>
+                                        <div class="au-value">${(result.action_units.AU04_Brow_Lowerer || 0).toFixed(3)}</div>
+                                        <div class="au-description">Frowning, concentration</div>
+                                    </div>
+                                    <div class="au-card">
+                                        <div class="au-name">AU05 - Upper Lid Raiser</div>
+                                        <div class="au-value">${(result.action_units.AU05_Upper_Lid_Raiser || 0).toFixed(3)}</div>
+                                        <div class="au-description">Wide eyes, alertness</div>
+                                    </div>
+                                    <div class="au-card">
+                                        <div class="au-name">AU06 - Cheek Raiser</div>
+                                        <div class="au-value">${(result.action_units.AU06_Cheek_Raiser || 0).toFixed(3)}</div>
+                                        <div class="au-description">Genuine smile, eye crinkling</div>
+                                    </div>
+                                    <div class="au-card">
+                                        <div class="au-name">AU07 - Lid Tightener</div>
+                                        <div class="au-value">${(result.action_units.AU07_Lid_Tightener || 0).toFixed(3)}</div>
+                                        <div class="au-description">Eye squinting, concentration</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Middle Face Action Units -->
+                            <div class="au-section">
+                                <h6>👃 Middle Face</h6>
+                                <div class="au-grid">
+                                    <div class="au-card">
+                                        <div class="au-name">AU09 - Nose Wrinkler</div>
+                                        <div class="au-value">${(result.action_units.AU09_Nose_Wrinkler || 0).toFixed(3)}</div>
+                                        <div class="au-description">Nose wrinkling, disgust</div>
+                                    </div>
+                                    <div class="au-card">
+                                        <div class="au-name">AU10 - Upper Lip Raiser</div>
+                                        <div class="au-value">${(result.action_units.AU10_Upper_Lip_Raiser || 0).toFixed(3)}</div>
+                                        <div class="au-description">Upper lip raising, sneer</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Lower Face Action Units -->
+                            <div class="au-section">
+                                <h6>👄 Lower Face</h6>
+                                <div class="au-grid">
+                                    <div class="au-card">
+                                        <div class="au-name">AU12 - Lip Corner Puller</div>
+                                        <div class="au-value">${(result.action_units.AU12_Lip_Corner_Puller || 0).toFixed(3)}</div>
+                                        <div class="au-description">Smiling, happiness</div>
+                                    </div>
+                                    <div class="au-card">
+                                        <div class="au-name">AU14 - Dimpler</div>
+                                        <div class="au-value">${(result.action_units.AU14_Dimpler || 0).toFixed(3)}</div>
+                                        <div class="au-description">Dimple creation, controlled smile</div>
+                                    </div>
+                                    <div class="au-card">
+                                        <div class="au-name">AU15 - Lip Corner Depressor</div>
+                                        <div class="au-value">${(result.action_units.AU15_Lip_Corner_Depressor || 0).toFixed(3)}</div>
+                                        <div class="au-description">Sad expression, frowning</div>
+                                    </div>
+                                    <div class="au-card">
+                                        <div class="au-name">AU17 - Chin Raiser</div>
+                                        <div class="au-value">${(result.action_units.AU17_Chin_Raiser || 0).toFixed(3)}</div>
+                                        <div class="au-description">Chin muscle activation</div>
+                                    </div>
+                                    <div class="au-card">
+                                        <div class="au-name">AU20 - Lip Stretcher</div>
+                                        <div class="au-value">${(result.action_units.AU20_Lip_Stretcher || 0).toFixed(3)}</div>
+                                        <div class="au-description">Horizontal lip stretching</div>
+                                    </div>
+                                    <div class="au-card">
+                                        <div class="au-name">AU23 - Lip Tightener</div>
+                                        <div class="au-value">${(result.action_units.AU23_Lip_Tightener || 0).toFixed(3)}</div>
+                                        <div class="au-description">Lip pressing, tension</div>
+                                    </div>
+                                    <div class="au-card">
+                                        <div class="au-name">AU25 - Lips Part</div>
+                                        <div class="au-value">${(result.action_units.AU25_Lips_Part || 0).toFixed(3)}</div>
+                                        <div class="au-description">Mouth opening, relaxation</div>
+                                    </div>
+                                    <div class="au-card">
+                                        <div class="au-name">AU26 - Jaw Drop</div>
+                                        <div class="au-value">${(result.action_units.AU26_Jaw_Drop || 0).toFixed(3)}</div>
+                                        <div class="au-description">Jaw dropping, surprise</div>
+                                    </div>
+                                    <div class="au-card">
+                                        <div class="au-name">AU27 - Mouth Stretch</div>
+                                        <div class="au-value">${(result.action_units.AU27_Mouth_Stretch || 0).toFixed(3)}</div>
+                                        <div class="au-description">Mouth stretching, vocalization</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Action Units Statistics -->
+                            <div class="au-section">
+                                <h6>📈 Analysis Statistics</h6>
+                                <div class="stats-grid">
+                                    <div class="stat-card">
+                                        <div class="stat-label">Active AUs</div>
+                                        <div class="stat-value">${result.action_units_stats?.total_aus_detected || 0}</div>
+                                    </div>
+                                    <div class="stat-card">
+                                        <div class="stat-label">Dominant AU</div>
+                                        <div class="stat-value">${result.action_units_stats?.max_intensity_au || 'None'}</div>
+                                    </div>
+                                    <div class="stat-card">
+                                        <div class="stat-label">Avg Intensity</div>
+                                        <div class="stat-value">${(result.action_units_stats?.average_intensity || 0).toFixed(3)}</div>
+                                    </div>
+                                    <div class="stat-card">
+                                        <div class="stat-label">Detection Quality</div>
+                                        <div class="stat-value">${(result.quality_metrics?.mean_confidence || 0).toFixed(3)}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+
+        function showActionUnitsChart(results) {
+            document.getElementById('actionUnitsChart').style.display = 'block';
+            
+            const ctx = document.getElementById('auChart').getContext('2d');
+            
+            if (auChart) {
+                auChart.destroy();
+            }
+            
+            // Extract AU data from results
+            const labels = results.map((_, index) => `Session ${index + 1}`);
+            const auNames = [
+                'AU01_Inner_Brow_Raiser', 'AU02_Outer_Brow_Raiser', 'AU04_Brow_Lowerer',
+                'AU06_Cheek_Raiser', 'AU07_Lid_Tightener', 'AU09_Nose_Wrinkler',
+                'AU12_Lip_Corner_Puller', 'AU15_Lip_Corner_Depressor', 'AU25_Lips_Part'
+            ];
+            
+            const colors = [
+                '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+                '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0'
+            ];
+            
+            const datasets = auNames.map((auName, index) => ({
+                label: auName.replace('_', ' '),
+                data: results.map(result => (result.action_units[auName] || 0).toFixed(3)),
+                borderColor: colors[index % colors.length],
+                backgroundColor: colors[index % colors.length] + '20',
+                tension: 0.4,
+                fill: false
+            }));
+            
+            auChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Action Units Evolution Across Sessions'
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 1,
+                            title: {
+                                display: true,
+                                text: 'Intensity (0-1)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Recording Sessions'
+                            }
+                        }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    }
+                }
+            });
+        }
+
+        function showEmotionTimeline(results) {
+            document.getElementById('emotionTimeline').style.display = 'block';
+            
+            const timeline = document.getElementById('emotionGraph');
+            let html = '<div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">';
+            
+            results.forEach((result, index) => {
+                const emotionColor = {
+                    'Happy': '#f6ad55',
+                    'Neutral': '#68d391',
+                    'Focused': '#4299e1',
+                    'Calm': '#9f7aea',
+                    'Surprised': '#f687b3'
+                }[result.dominant_emotion] || '#cbd5e0';
+                
+                html += `
+                    <div style="background: ${emotionColor}; padding: 8px 12px; border-radius: 20px; color: white; font-weight: 600; text-align: center; min-width: 80px;">
+                        ${result.dominant_emotion}
+                        <div style="font-size: 0.8rem; opacity: 0.8;">S${result.session}</div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            timeline.innerHTML = html;
+        }
+
+        function showCurrentSession() {
+            document.getElementById('currentSession').style.display = 'block';
+        }
+
+        function hideCurrentSession() {
+            document.getElementById('currentSession').style.display = 'none';
+        }
+
+        function showScheduleStatus(message, type) {
+            const statusDiv = document.getElementById('scheduleStatus');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('recordingStatus');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+        }
+
+        function showProgress() {
+            document.getElementById('progressContainer').style.display = 'block';
+            document.getElementById('progressBar').style.width = '0%';
+        }
+
+        function hideProgress() {
+            document.getElementById('progressContainer').style.display = 'none';
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+    </script>
+</body>
+</html>
