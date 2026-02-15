@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Multimodal Emotion Analyzer</title>
-  <link rel="stylesheet" href="/static/css/style.css?v=20251024" />
+  <link rel="stylesheet" href="/static/css/style.css?v=20251030" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='8' fill='%233b82f6'/%3E%3C/svg%3E">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -40,13 +41,18 @@
               </div>
               <div class="card-body">
                 <div class="video-wrapper">
-                  <img id="serverStream" src="/video_feed" alt="Video Stream" />
+                  <!-- Browser webcam for cloud deployment -->
+                  <video id="browserWebcam" autoplay playsinline muted style="display:none; width:100%; max-width:640px; border-radius:8px;"></video>
+                  <!-- Server stream fallback for local dev -->
+                  <img id="serverStream" src="/video_feed" alt="Video Stream" style="display:none;" />
+                  <canvas id="webcamCanvas" style="display:none;"></canvas>
                 </div>
                 <div class="controls-row">
                   <div class="control-group">
                     <label for="cameraSelect">Camera</label>
                     <select id="cameraSelect">
-                      <option value="0">Device 0</option>
+                      <option value="browser">Browser Webcam</option>
+                      <option value="0">Server Device 0</option>
                     </select>
                   </div>
                   <div class="control-group">
@@ -105,6 +111,12 @@
                 <div class="chart-card" style="margin-top:10px">
                   <h3 class="section-subtitle">AU timeline (top signals)</h3>
                   <canvas id="auChart" height="140"></canvas>
+
+                  <h3 class="section-subtitle" style="margin-top:12px;">AU activity heatmap (all AUs)</h3>
+                  <div class="card" style="padding:8px;">
+                    <canvas id="auHeatmapCanvas" height="320" style="width:100%; display:block;"></canvas>
+                    <div class="muted" style="font-size:12px; margin-top:4px;">Last 60s · Rows: AUs · Columns: time bins · Color = intensity</div>
+                  </div>
                 </div>
                 <div class="card" style="margin-top:12px">
                   <div class="card-header">
@@ -155,7 +167,28 @@
                   <div id="emotionChanges" class="changes-list"></div>
                 </div>
                 <div class="au-breakdown">
-                  <h3 class="section-subtitle">Top Action Units</h3>
+                  <h3 class="section-subtitle">📊 Action Units Activity</h3>
+                  <p style="font-size: 12px; color: var(--subtext); margin: 0 0 12px 0;">
+                    Action Units (AUs) are facial muscle movements that create expressions. Higher values indicate stronger activation.
+                  </p>
+                  <div id="auSummaryStats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px;">
+                    <div style="background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.2); border-radius: 8px; padding: 10px; text-align: center;">
+                      <div style="font-size: 11px; color: #6ee7b7; margin-bottom: 4px; font-weight: 500;">Active AUs</div>
+                      <div id="auActiveCount" style="font-size: 24px; font-weight: 700; color: #10b981;">0</div>
+                    </div>
+                    <div style="background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.2); border-radius: 8px; padding: 10px; text-align: center;">
+                      <div style="font-size: 11px; color: #93c5fd; margin-bottom: 4px; font-weight: 500;">Avg Intensity</div>
+                      <div id="auAvgIntensity" style="font-size: 24px; font-weight: 700; color: #3b82f6;">0%</div>
+                    </div>
+                    <div style="background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.2); border-radius: 8px; padding: 10px; text-align: center;">
+                      <div style="font-size: 11px; color: #c4b5fd; margin-bottom: 4px; font-weight: 500;">Peak AU</div>
+                      <div id="auPeakName" style="font-size: 20px; font-weight: 700; color: #a855f7;">—</div>
+                    </div>
+                    <div style="background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.2); border-radius: 8px; padding: 10px; text-align: center;">
+                      <div style="font-size: 11px; color: #fde047; margin-bottom: 4px; font-weight: 500;">Peak Value</div>
+                      <div id="auPeakValue" style="font-size: 24px; font-weight: 700; color: #eab308;">0%</div>
+                    </div>
+                  </div>
                   <div id="auBars" class="au-bars"></div>
                 </div>
                 <div class="emotion-explain">
@@ -183,6 +216,92 @@
                     <pre id="lastResultJson" class="code"></pre>
                   </details>
                 </div>
+
+                <!-- AU Analytics Dashboard -->
+                <div class="card" style="margin-top:12px" id="auAnalyticsDashboard">
+                  <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3>📈 AU Analytics Dashboard</h3>
+                    <div style="display: flex; gap: 8px;">
+                      <button id="exportAUData" class="btn btn-sm" style="font-size: 12px; padding: 6px 12px;">Export Data</button>
+                      <button id="resetAUStats" class="btn btn-sm" style="font-size: 12px; padding: 6px 12px;">Reset Stats</button>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    <!-- AU Statistics Overview -->
+                    <div class="au-stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px;">
+                      <div class="stat-card" style="background: linear-gradient(135deg, rgba(16,185,129,0.15), rgba(16,185,129,0.05)); border: 1px solid rgba(16,185,129,0.3); border-radius: 12px; padding: 16px;">
+                        <div style="font-size: 12px; color: #6ee7b7; margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Total Frames</div>
+                        <div id="auStatTotalFrames" style="font-size: 32px; font-weight: 700; color: #10b981;">0</div>
+                        <div style="font-size: 11px; color: #6ee7b7; margin-top: 4px; opacity: 0.8;">Analyzed</div>
+                      </div>
+                      <div class="stat-card" style="background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(59,130,246,0.05)); border: 1px solid rgba(59,130,246,0.3); border-radius: 12px; padding: 16px;">
+                        <div style="font-size: 12px; color: #93c5fd; margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Active AUs</div>
+                        <div id="auStatActiveCount" style="font-size: 32px; font-weight: 700; color: #3b82f6;">0</div>
+                        <div style="font-size: 11px; color: #93c5fd; margin-top: 4px; opacity: 0.8;">Currently</div>
+                      </div>
+                      <div class="stat-card" style="background: linear-gradient(135deg, rgba(168,85,247,0.15), rgba(168,85,247,0.05)); border: 1px solid rgba(168,85,247,0.3); border-radius: 12px; padding: 16px;">
+                        <div style="font-size: 12px; color: #c4b5fd; margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Avg Intensity</div>
+                        <div id="auStatAvgIntensity" style="font-size: 32px; font-weight: 700; color: #a855f7;">0%</div>
+                        <div style="font-size: 11px; color: #c4b5fd; margin-top: 4px; opacity: 0.8;">All time</div>
+                      </div>
+                      <div class="stat-card" style="background: linear-gradient(135deg, rgba(234,179,8,0.15), rgba(234,179,8,0.05)); border: 1px solid rgba(234,179,8,0.3); border-radius: 12px; padding: 16px;">
+                        <div style="font-size: 12px; color: #fde047; margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Peak AU</div>
+                        <div id="auStatPeakAU" style="font-size: 24px; font-weight: 700; color: #eab308;">—</div>
+                        <div id="auStatPeakValue" style="font-size: 14px; color: #fde047; margin-top: 4px; opacity: 0.8;">0%</div>
+                      </div>
+                    </div>
+
+                    <!-- Time Series Chart -->
+                    <div class="chart-card" style="margin-bottom: 16px;">
+                      <h3 class="section-subtitle" style="margin-bottom: 12px;">📊 AU Intensity Over Time</h3>
+                      <canvas id="auTimeSeriesChart" height="200"></canvas>
+                    </div>
+
+                    <!-- Distribution Chart -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                      <div class="chart-card">
+                        <h3 class="section-subtitle" style="margin-bottom: 12px;">📉 AU Distribution</h3>
+                        <canvas id="auDistributionChart" height="180"></canvas>
+                      </div>
+                      <div class="chart-card">
+                        <h3 class="section-subtitle" style="margin-bottom: 12px;">🎯 Top 10 AUs</h3>
+                        <canvas id="auTopChart" height="180"></canvas>
+                      </div>
+                    </div>
+
+                    <!-- Correlation Matrix -->
+                    <div class="chart-card" style="margin-bottom: 16px;">
+                      <h3 class="section-subtitle" style="margin-bottom: 12px;">🔗 AU Correlation Heatmap</h3>
+                      <p style="font-size: 11px; color: var(--subtext); margin-bottom: 8px;">Shows which AUs activate together (brighter = stronger correlation)</p>
+                      <canvas id="auCorrelationChart" height="300"></canvas>
+                    </div>
+
+                    <!-- AU Frequency Table -->
+                    <div class="chart-card">
+                      <h3 class="section-subtitle" style="margin-bottom: 12px;">📋 AU Statistics Table</h3>
+                      <div style="max-height: 400px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                          <thead style="position: sticky; top: 0; background: var(--bg); border-bottom: 2px solid rgba(255,255,255,0.2);">
+                            <tr>
+                              <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; color: var(--subtext);">Action Unit</th>
+                              <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--subtext);">Mean</th>
+                              <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--subtext);">Max</th>
+                              <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--subtext);">Std Dev</th>
+                              <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--subtext);">Frequency</th>
+                              <th style="padding: 12px; text-align: center; font-size: 12px; font-weight: 600; color: var(--subtext);">Trend</th>
+                            </tr>
+                          </thead>
+                          <tbody id="auStatsTableBody" style="font-size: 13px;">
+                            <tr>
+                              <td colspan="6" style="padding: 20px; text-align: center; color: var(--subtext);">No AU data available yet. Start recording to see statistics.</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <details class="details">
                   <summary>Diagnostics</summary>
                   <div class="controls-row" style="margin:6px 0 8px 0;">
@@ -205,67 +324,209 @@
           <div class="grid two">
             <div class="card">
               <div class="card-header">
-                <h2>Microphone Recording</h2>
+                <h2>🎤 Audio Emotion Analysis</h2>
               </div>
               <div class="card-body">
-                <div class="controls-row">
-                  <div class="control-group">
-                    <label for="micSelect">Microphone</label>
-                    <select id="micSelect"></select>
+                <p style="font-size: 13px; color: var(--subtext); margin-bottom: 16px;">
+                  Record live audio or upload a file to analyze emotions, tone, and mood using AI transcription and emotion detection.
+                </p>
+
+                <!-- Audio Input Mode Tabs -->
+                <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+                  <button id="audioModeRecord" class="btn primary" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                    <span>🎙️</span> Live Recording
+                  </button>
+                  <button id="audioModeUpload" class="btn" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                    <span>📁</span> Upload File
+                  </button>
+                </div>
+
+                <!-- Live Recording Section -->
+                <div id="liveRecordingSection">
+                  <div class="control-group" style="margin-bottom: 12px;">
+                    <label for="micSelect" style="font-weight: 600; margin-bottom: 8px; display: block;">Microphone</label>
+                    <select id="micSelect" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; color: var(--text);">
+                      <option value="">Select microphone...</option>
+                    </select>
                   </div>
-                  <div class="control-group">
-                    <label for="audioDuration">Duration (s)</label>
-                    <input id="audioDuration" type="number" min="1" value="10" />
+
+                  <div class="control-group" style="margin-bottom: 16px;">
+                    <label for="audioDuration" style="font-weight: 600; margin-bottom: 8px; display: block;">Recording Duration (seconds)</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                      <input 
+                        type="range" 
+                        id="audioDuration" 
+                        min="5" 
+                        max="60" 
+                        value="10" 
+                        style="flex: 1;"
+                        oninput="document.getElementById('durationDisplay').textContent = this.value + 's'"
+                      />
+                      <span id="durationDisplay" style="min-width: 40px; text-align: center; font-weight: 600; color: #3b82f6;">10s</span>
+                    </div>
+                    <p style="font-size: 11px; color: var(--subtext); margin-top: 4px;">Recording will auto-stop after the selected duration</p>
+                  </div>
+
+                  <!-- Waveform Visualizer -->
+                  <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 16px;">
+                    <canvas id="audioWave" height="60" style="width: 100%; display: block;"></canvas>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+                      <span id="audioTimer" style="font-family: monospace; font-size: 18px; font-weight: 600; color: #10b981;">00:00</span>
+                      <span id="audioStatus" style="font-size: 12px; color: var(--subtext);">Ready</span>
+                    </div>
+                  </div>
+
+                  <div class="buttons-row" style="gap: 12px;">
+                    <button id="startAudioBtn" class="btn primary" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                      <span style="font-size: 18px;">🔴</span>
+                      Start Recording
+                    </button>
+                    <button id="stopAudioBtn" class="btn" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;" disabled>
+                      <span style="font-size: 18px;">⏹️</span>
+                      Stop
+                    </button>
+                  </div>
+
+                  <div style="margin-top: 16px; padding: 12px; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.2); border-radius: 10px;">
+                    <h4 style="margin: 0 0 8px 0; font-size: 13px; color: #6ee7b7;">💡 Tips for best results:</h4>
+                    <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: var(--subtext);">
+                      <li>Speak clearly and naturally</li>
+                      <li>Minimize background noise</li>
+                      <li>Keep the microphone at a consistent distance</li>
+                      <li>Allow browser microphone permissions when prompted</li>
+                    </ul>
                   </div>
                 </div>
-                <div class="waveform">
-                  <canvas id="audioWave" height="80"></canvas>
-                </div>
-                <div class="buttons-row">
-                  <button id="startAudioBtn" class="btn primary">Start Audio</button>
-                  <button id="stopAudioBtn" class="btn" disabled>Stop</button>
-                  <div class="pill-stats">
-                    <span id="audioTimer" class="pill">00:00</span>
-                    <span id="audioStatus" class="pill">Idle</span>
+
+                <!-- File Upload Section (hidden by default) -->
+                <div id="fileUploadSection" style="display: none;">
+                  <div class="control-group" style="margin-bottom: 16px;">
+                    <label for="audioFileUpload" style="font-weight: 600; margin-bottom: 8px;">Select Audio File</label>
+                    <div style="position: relative;">
+                      <input 
+                        type="file" 
+                        id="audioFileUpload" 
+                        accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.webm" 
+                        style="width: 100%; padding: 12px; background: rgba(255,255,255,0.05); border: 2px dashed var(--border); border-radius: 10px; cursor: pointer; transition: all 0.2s ease;"
+                        onchange="this.style.borderColor = 'rgba(59,130,246,0.5)'"
+                      />
+                    </div>
+                    <div id="audioFileName" style="margin-top: 8px; font-size: 12px; color: var(--subtext); font-style: italic;"></div>
                   </div>
+                  
+                  <div class="buttons-row" style="margin-top: 16px;">
+                    <button id="uploadAudioBtn" class="btn primary" style="flex: 1;">
+                      <span style="margin-right: 8px;">🎯</span>
+                      Analyze Audio
+                    </button>
+                  </div>
+
+                  <div style="margin-top: 20px; padding: 12px; background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.2); border-radius: 10px;">
+                    <h4 style="margin: 0 0 8px 0; font-size: 13px; color: #93c5fd;">Supported Formats:</h4>
+                    <p style="margin: 0; font-size: 12px; color: var(--subtext);">
+                      MP3, WAV, M4A, FLAC, OGG, WebM
+                    </p>
+                    <p style="margin: 8px 0 0 0; font-size: 11px; color: var(--subtext); opacity: 0.8;">
+                      Maximum file size: 100MB
+                    </p>
+                  </div>
+                </div>
+                
+                <div id="audioProgress" style="display: none; margin-top: 16px;">
+                  <div class="progress">
+                    <div class="progress-bar" style="width: 100%; animation: pulse 1.5s ease-in-out infinite;"></div>
+                  </div>
+                  <p style="text-align: center; margin-top: 8px; color: var(--subtext); font-size: 12px;">
+                    Analyzing audio... This may take a moment
+                  </p>
                 </div>
               </div>
             </div>
 
             <div class="card">
               <div class="card-header">
-                <h2>Audio Analysis</h2>
+                <h2>📊 Analysis Results</h2>
               </div>
               <div class="card-body">
-                <div class="telemetry">
-                  <div>
-                    <div class="label">Emotion</div>
-                    <div id="audioEmotion" class="value">—</div>
+                <div id="audioResultDisplay" style="display: none;">
+                  <!-- Emotion Summary Cards -->
+                  <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
+                    <div style="background: linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.05)); border: 1px solid rgba(34,197,94,0.3); border-radius: 10px; padding: 14px;">
+                      <div style="font-size: 11px; color: #6ee7b7; margin-bottom: 6px; font-weight: 600; text-transform: uppercase;">Primary Emotion</div>
+                      <div id="audioPrimaryEmotion" style="font-size: 24px; font-weight: 700; color: #22c55e;">—</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(59,130,246,0.05)); border: 1px solid rgba(59,130,246,0.3); border-radius: 10px; padding: 14px;">
+                      <div style="font-size: 11px; color: #93c5fd; margin-bottom: 6px; font-weight: 600; text-transform: uppercase;">Confidence</div>
+                      <div id="audioConfidenceScore" style="font-size: 24px; font-weight: 700; color: #3b82f6;">—</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, rgba(168,85,247,0.15), rgba(168,85,247,0.05)); border: 1px solid rgba(168,85,247,0.3); border-radius: 10px; padding: 14px;">
+                      <div style="font-size: 11px; color: #c4b5fd; margin-bottom: 6px; font-weight: 600; text-transform: uppercase;">Mood</div>
+                      <div id="audioMood" style="font-size: 20px; font-weight: 700; color: #a855f7;">—</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, rgba(234,179,8,0.15), rgba(234,179,8,0.05)); border: 1px solid rgba(234,179,8,0.3); border-radius: 10px; padding: 14px;">
+                      <div style="font-size: 11px; color: #fde047; margin-bottom: 6px; font-weight: 600; text-transform: uppercase;">Energy</div>
+                      <div id="audioEnergy" style="font-size: 20px; font-weight: 700; color: #eab308;">—</div>
+                    </div>
                   </div>
-                  <div>
-                    <div class="label">Confidence</div>
-                    <div class="value"><span id="audioConfidence">—</span></div>
+
+                  <!-- Transcript Section -->
+                  <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 16px;">
+                    <h3 style="margin: 0 0 10px 0; font-size: 13px; color: #93c5fd; display: flex; align-items: center;">
+                      <span style="margin-right: 6px;">📝</span>
+                      Transcript
+                    </h3>
+                    <div id="audioTranscript" style="font-size: 13px; color: var(--text); line-height: 1.6; max-height: 150px; overflow-y: auto;">—</div>
                   </div>
+
+                  <!-- Detailed Analysis -->
+                  <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 16px;">
+                    <h3 style="margin: 0 0 10px 0; font-size: 13px; color: #93c5fd;">Overall Vibe</h3>
+                    <div id="audioOverallVibe" style="font-size: 13px; color: var(--text); line-height: 1.5;">—</div>
+                  </div>
+
+                  <!-- Additional Metrics -->
+                  <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px; padding: 10px;">
+                      <div style="font-size: 11px; color: var(--subtext); margin-bottom: 4px;">Tone</div>
+                      <div id="audioTone" style="font-size: 14px; color: var(--text); font-weight: 500;">—</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px; padding: 10px;">
+                      <div style="font-size: 11px; color: var(--subtext); margin-bottom: 4px;">Secondary Emotions</div>
+                      <div id="audioSecondaryEmotions" style="font-size: 14px; color: var(--text); font-weight: 500;">—</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px; padding: 10px;">
+                      <div style="font-size: 11px; color: var(--subtext); margin-bottom: 4px;">Key Phrases</div>
+                      <div id="audioKeyPhrases" style="font-size: 14px; color: var(--text); font-weight: 500;">—</div>
+                    </div>
+                  </div>
+
+                  <!-- Raw JSON Toggle -->
+                  <details class="details" style="margin-top: 16px;">
+                    <summary style="cursor: pointer; color: #93c5fd; font-size: 13px;">View Raw JSON</summary>
+                    <pre id="audioRawJSON" class="code" style="margin-top: 10px; font-size: 11px;"></pre>
+                  </details>
                 </div>
-                <details class="details">
-                  <summary>Result JSON</summary>
-                  <pre id="audioResultsContent" class="code"></pre>
-                </details>
+
+                <div id="audioPlaceholder" style="text-align: center; padding: 40px 20px; color: var(--subtext);">
+                  <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.3;">🎵</div>
+                  <p style="margin: 0; font-size: 14px;">Upload an audio file to see analysis results</p>
+                  <p style="margin: 8px 0 0 0; font-size: 12px; opacity: 0.7;">AI-powered emotion detection and transcription</p>
+                </div>
+
+                <div id="audioError" style="display: none; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; padding: 14px;">
+                  <h4 style="margin: 0 0 8px 0; font-size: 13px; color: #fca5a5;">⚠️ Analysis Error</h4>
+                  <p id="audioErrorMessage" style="margin: 0; font-size: 12px; color: var(--text);"></p>
+                </div>
               </div>
             </div>
           </div>
         </section>
-      </main>
 
-      <footer class="app-footer">
-        <div>© 2025 Emotion Analyzer</div>
-        <div class="links">
-          <a href="/" onclick="location.reload(); return false;">Reload</a>
-        </div>
-      </footer>
+        
+      </main>
     </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="/static/js/app.js?v=20251025"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/js/app.js?v=20251030"></script>
   </body>
-  </html>
+</html>

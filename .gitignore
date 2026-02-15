@@ -107,7 +107,5 @@ baseline_stats.json
 training_data.pkl
 webcam_test.jpg
 test_face.jpg
-env.example
 .env
-config.py
 app_new.py

@@ -19,6 +19,11 @@ numpy<2.0
 # soundfile>=0.12.1
 # librosa
 
+# Groq for fast audio transcription and emotion analysis
+# Get free API key at: https://console.groq.com/keys
+groq>=0.4.0
+pydub>=0.25.1  # For audio format conversion
+
 # --- Video/facial expression analysis ---
 opencv-python>=4.9.0.80
 altair>=5.3,<6

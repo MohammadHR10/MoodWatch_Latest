@@ -1,182 +1,155 @@
-# 🎵 VoiceVibe - AI Audio Mood Analyzer
+# VoiceVibe - AI Audio & Video Mood Analyzer
 
-VoiceVibe is a professional AI-powered audio analysis tool that transcribes speech, identifies different speakers, and performs comprehensive emotional analysis. Think of it as "MoodWatch but for sound" - it analyzes the emotional tone, energy level, and overall vibe of audio recordings.
+VoiceVibe is an AI-powered multimodal analysis tool that transcribes speech, identifies different speakers, and performs comprehensive emotional analysis on both audio and video content.
 
-## 🏗️ Project Structure
+![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)
+![Flask](https://img.shields.io/badge/Flask-3.0-green.svg)
+![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-```
-voicevibe/
-├── app.py                 # Main application entry point
-├── config.py              # Configuration settings
-├── requirements.txt       # Python dependencies
-├── env.example           # Environment variables template
-├── README.md             # This file
-├── app_old.py            # Original monolithic version (backup)
-├── audio_analyzer/       # Core application package
-│   ├── __init__.py       # Application factory
-│   ├── routes.py         # Flask routes and request handling
-│   ├── models.py         # Audio processing and AI models
-│   └── utils.py          # Utility functions
-├── templates/            # HTML templates
-│   └── index.html        # Main UI template
-├── static/               # Static assets
-│   ├── css/
-│   │   └── style.css     # Application styles
-│   ├── js/
-│   │   └── app.js        # Frontend JavaScript
-│   └── images/           # Images and icons
-└── uploads/              # Temporary upload directory
-```
+## Features
 
-## ✨ Features
-
-- **🎤 Audio Transcription**: Convert speech to text using OpenAI Whisper
-- **🗣️ Speaker Diarization**: Identify and separate different speakers (optional)
-- **🎭 Emotional Analysis**: Comprehensive mood and emotion detection including:
+- **Audio Transcription** - Convert speech to text using Groq's fast Whisper API
+- **Speaker Diarization** - Identify and separate different speakers (optional)
+- **Emotional Analysis** - Comprehensive mood and emotion detection:
   - Primary and secondary emotions
   - Energy levels (Low, Medium, High)
   - Speaking tone analysis
   - Stress indicators
   - Emotional intensity measurement
   - Key emotional phrases extraction
-- **📱 Modern UI**: Beautiful, responsive web interface with drag-and-drop file upload
-- **🌐 Multi-format Support**: MP3, WAV, M4A, FLAC, OGG audio files
-- **🔧 Professional Architecture**: Modular Flask application with proper separation of concerns
-- **🚀 API Endpoints**: RESTful API for programmatic access
+- **Video Analysis** - Facial expression and Action Unit (AU) detection via Py-Feat
+- **Real-time Processing** - Stream analysis with webcam support
+- **Modern Web UI** - Responsive interface with drag-and-drop file upload
+- **REST API** - Programmatic access for integration
 
-## 🚀 Quick Start
+## Project Structure
+
+```
+voicevibe/
+├── flask_app.py          # Main Flask application
+├── config.py             # Configuration settings
+├── pyfeat_bridge.py      # Py-Feat facial analysis bridge
+├── requirements.txt      # Python dependencies
+├── .env.example          # Environment variables template
+├── templates/
+│   └── index.html        # Main web interface
+├── static/
+│   ├── app.js            # Frontend JavaScript
+│   ├── style.css         # Application styles
+│   ├── css/              # Additional stylesheets
+│   ├── js/               # Additional scripts
+│   └── images/           # Static images
+├── ml-worker/            # Lightweight ML worker service
+│   ├── app.py            # Worker Flask app
+│   ├── lightweight_detector.py
+│   └── requirements.txt
+├── uploads/              # Temporary upload directory
+└── sessions/             # Session data storage
+```
+
+## Quick Start
 
 ### Prerequisites
 
 - Python 3.8 or higher
-- OpenAI API key
+- Groq API key (free at [console.groq.com](https://console.groq.com/keys))
 - (Optional) HuggingFace token for speaker diarization
+- (Optional) OpenAI API key for legacy support
 
 ### Installation
 
-1. **Clone or download this project**
+1. **Clone the repository**
 
-2. **Install dependencies**:
+   ```bash
+   git clone https://github.com/MohammadHR10/MoodWatch_Beyond-.01.git
+   cd MoodWatch_Beyond-.01
+   ```
+
+2. **Create a virtual environment**
+
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. **Install dependencies**
 
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Set up environment variables**:
+4. **Configure environment variables**
 
    ```bash
-   # Copy the example environment file
-   cp env.example .env
-
-   # Edit .env with your actual values
-   nano .env
+   cp .env.example .env
    ```
 
-   Or set environment variables directly:
+   Edit `.env` and add your API keys:
 
-   ```bash
-   export OPENAI_API_KEY="your-openai-api-key-here"
-   export HF_TOKEN="your-huggingface-token-here"  # Optional, for speaker diarization
+   ```env
+   GROQ_API_KEY=your_groq_api_key_here
+   # Optional:
+   OPENAI_API_KEY=your_openai_api_key_here
+   HF_TOKEN=your_huggingface_token_here
    ```
 
-4. **Run the application (Flask + OpenFace)**:
+5. **Run the application**
 
    ```bash
    python flask_app.py
    ```
 
-5. **Open your browser** and go to: `http://127.0.0.1:5002`
+6. **Open your browser** at [http://127.0.0.1:5000](http://127.0.0.1:5000)
 
-Note: The project now uses OpenFace for facial Action Units and emotion estimation in the video UI. MediaPipe paths are deprecated and kept only as stubs.
+## API Keys Setup
 
-## 🎯 How to Use
+### Groq API Key (Required)
 
-1. **Upload Audio**: Click or drag your audio file into the upload area
-2. **Optional**: Check "Enable Speaker Separation" if you want to identify different speakers
-3. **Analyze**: Click "Analyze Audio" to process your file
-4. **View Results**: Get comprehensive analysis including:
-   - Full transcript
-   - Detailed emotional analysis
-   - Speaker timeline (if enabled)
+VoiceVibe uses Groq for fast audio transcription and emotion analysis:
 
-## 📋 API Keys Setup
+1. Go to [Groq Console](https://console.groq.com/keys)
+2. Create a free account (no credit card required)
+3. Generate an API key
+4. Add to `.env`: `GROQ_API_KEY=your_key`
 
-### OpenAI API Key (Required)
+**Why Groq?**
 
-1. Go to [OpenAI API Keys](https://platform.openai.com/account/api-keys)
-2. Create a new API key
-3. Set it as environment variable: `OPENAI_API_KEY`
+- Up to 20x faster Whisper transcription than OpenAI
+- Free tier with generous limits
+- Llama 3.3 70B for accurate emotion analysis
 
-### HuggingFace Token (Optional - for Speaker Diarization)
+### HuggingFace Token (Optional)
+
+Required for speaker diarization (separating different speakers):
 
 1. Go to [HuggingFace Settings](https://huggingface.co/settings/tokens)
 2. Create a new token
-3. Accept the terms for `pyannote/speaker-diarization` model
-4. Set it as environment variable: `HF_TOKEN`
+3. Accept terms for `pyannote/speaker-diarization` model
+4. Add to `.env`: `HF_TOKEN=your_token`
 
-## 🔧 Configuration
+## Usage
 
-You can modify these settings in `app.py`:
+### Web Interface
 
-- `CHAT_MODEL`: OpenAI model for emotion analysis (default: "gpt-4o-mini")
-- `ENABLE_DIARIZATION_DEFAULT`: Default state for speaker diarization checkbox
+1. Upload an audio or video file (drag & drop or click)
+2. (Optional) Enable "Speaker Separation" for multi-speaker content
+3. Click "Analyze" to process
+4. View comprehensive results including transcript, emotions, and speaker timeline
 
-## 📊 Emotional Analysis Details
+### Supported Formats
 
-VoiceVibe provides comprehensive emotional analysis including:
+**Audio:** MP3, WAV, M4A, FLAC, OGG, AAC, WebM  
+**Video:** MP4, WebM, AVI, MOV
 
-- **Primary Emotion**: Main detected emotion (Happy, Sad, Angry, Excited, Calm, Anxious, etc.)
-- **Secondary Emotions**: Additional emotions detected
-- **Mood Category**: Overall mood classification (Positive, Negative, Neutral, Mixed)
-- **Energy Level**: Speaking energy (Low, Medium, High)
-- **Tone**: Communication style (Formal, Casual, Emotional, etc.)
-- **Stress Indicators**: Signs of stress (Fast speech, Repetition, Filler words, Hesitation)
-- **Emotional Intensity**: How intense the emotions are (0-100%)
-- **Key Phrases**: Important emotional phrases from the transcript
-- **Overall Vibe**: Casual description of the overall feeling
+### API Endpoints
 
-## 🛠️ Troubleshooting
-
-### Common Issues
-
-1. **"No speech detected"**: Ensure your audio file contains clear speech
-2. **API errors**: Check your OpenAI API key and account limits
-3. **Speaker diarization not working**: Install pyannote.audio and set HF_TOKEN
-4. **File upload issues**: Ensure your audio file is in a supported format
-
-### File Size Limits
-
-- Maximum file size depends on your OpenAI plan
-- For large files, consider splitting them into smaller chunks
-
-## 🎵 Supported Audio Formats
-
-- MP3
-- WAV
-- M4A
-- FLAC
-- OGG
-
-## 🤝 Contributing
-
-This project was built based on conversation requirements for creating an audio analysis tool that can "rip" audio files, separate speakers, and analyze emotional content like MoodWatch does for visual content.
-
-## 📄 License
-
-This project is open source. Feel free to modify and use it for your needs.
-
-## 🔌 API Endpoints
-
-VoiceVibe provides RESTful API endpoints for programmatic access:
-
-### POST `/api/analyze`
+#### `POST /api/analyze`
 
 Analyze audio file and return JSON results.
 
-**Parameters:**
-
-- `audio`: Audio file (multipart/form-data)
-- `diarize`: Boolean, enable speaker diarization (optional)
+```bash
+curl -X POST -F "audio=@recording.mp3" http://localhost:5000/api/analyze
+```
 
 **Response:**
 
@@ -194,54 +167,74 @@ Analyze audio file and return JSON results.
     "stress_indicators": [],
     "emotional_intensity": 0.75,
     "key_phrases": ["great news", "excited to share"],
-    "overall_vibe": "Enthusiastic and positive",
-    "explanation": "...",
-    "diarization": [...]
+    "overall_vibe": "Enthusiastic and positive"
   }
 }
 ```
 
-### GET `/health`
+#### `GET /health`
 
 Health check endpoint.
 
-### GET `/config`
+#### `GET /config`
 
 Get public configuration information.
 
-## 🧪 Development
+## Configuration
 
-### Project Architecture
+Environment variables (set in `.env`):
 
-- **Flask Application Factory**: Modular app creation with configuration management
-- **Blueprint Structure**: Organized route handling
-- **Separation of Concerns**: Models, utils, routes, and templates are separate
-- **Professional Error Handling**: User-friendly error messages and logging
-- **Static Asset Management**: Organized CSS, JS, and image files
+| Variable          | Required | Description                                                    |
+| ----------------- | -------- | -------------------------------------------------------------- |
+| `GROQ_API_KEY`    | Yes      | Groq API key for audio analysis                                |
+| `OPENAI_API_KEY`  | No       | OpenAI API key (legacy support)                                |
+| `HF_TOKEN`        | No       | HuggingFace token for speaker diarization                      |
+| `EMOTION_BACKEND` | No       | Backend for facial analysis: `pyfeat`, `openface`, or `worker` |
+| `SECRET_KEY`      | No       | Flask secret key                                               |
+| `PORT`            | No       | Server port (default: 5000)                                    |
 
-### Adding New Features
+## Emotional Analysis Output
 
-1. **Models**: Add audio processing functions to `audio_analyzer/models.py`
-2. **Routes**: Add new endpoints to `audio_analyzer/routes.py`
-3. **Frontend**: Update templates and static files
-4. **Configuration**: Update `config.py` for new settings
+VoiceVibe provides comprehensive emotional analysis:
 
-## 🆘 Support
+| Field                 | Description                                       |
+| --------------------- | ------------------------------------------------- |
+| `primary_emotion`     | Main detected emotion (Happy, Sad, Angry, etc.)   |
+| `secondary_emotions`  | Additional emotions detected                      |
+| `mood_category`       | Overall mood (Positive, Negative, Neutral, Mixed) |
+| `energy_level`        | Speaking energy (Low, Medium, High)               |
+| `tone`                | Communication style (Formal, Casual, Emotional)   |
+| `stress_indicators`   | Signs of stress (Fast speech, Hesitation, etc.)   |
+| `emotional_intensity` | Emotion intensity score (0-100%)                  |
+| `key_phrases`         | Important emotional phrases from transcript       |
+| `overall_vibe`        | Casual description of the overall feeling         |
 
-If you encounter issues:
+## Deployment
 
-1. Check that all environment variables are set correctly
-2. Ensure you have a stable internet connection
-3. Verify your audio file format is supported
-4. Check your OpenAI API account status and limits
-5. Review the logs for detailed error information
+See [DEPLOY.md](DEPLOY.md) for deployment instructions including:
 
-### Common Issues
+- Docker deployment
+- Google Cloud Run
+- Production configuration
 
-- **Import errors**: Ensure all dependencies are installed via `pip install -r requirements.txt`
-- **API key errors**: Double-check your OpenAI API key is valid and has sufficient credits
-- **Diarization issues**: Verify HuggingFace token and model access permissions
+## Troubleshooting
+
+| Issue                           | Solution                                |
+| ------------------------------- | --------------------------------------- |
+| "No speech detected"            | Ensure audio contains clear speech      |
+| API errors                      | Verify API keys and account limits      |
+| Speaker diarization not working | Install pyannote.audio and set HF_TOKEN |
+| Import errors                   | Run `pip install -r requirements.txt`   |
+| Large file issues               | Split into smaller chunks               |
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
-Built with ❤️ using Flask, OpenAI Whisper, and modern web technologies.
+Built with Flask, Groq, Py-Feat, and modern web technologies.

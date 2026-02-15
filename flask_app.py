@@ -1,56 +1,67 @@
 #!/usr/bin/env python3
 """
 Flask App for Audio and Video Mood Analysis
-Combines all previous functionality with smooth video streaming
+Optimized for GCP Cloud Run deployment
 """
 
 import os
 import sys
 import cv2
 import json
-import time
 import tempfile
+import time
 import subprocess
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify, Response, redirect, url_for
-from flask import send_file
+from flask import Flask, render_template, request, jsonify, Response, send_file
 from werkzeug.utils import secure_filename
-from collections import deque
+from collections import deque, defaultdict
 import numpy as np
-from collections import defaultdict
 from threading import Thread, Event
 import logging
-import config
+from typing import Optional
+from groq import Groq
 
 # Load configuration
 from config import load_dotenv
 load_dotenv()
 
-# Import existing audio analysis functions lazily to avoid heavy deps at startup
-def _get_process_audio_file():
-    try:
-        from audio_analyzer.models import process_audio_file as _p
-        return _p
-    except Exception:
-        return None
-    return _p
+# OpenFace support (optional - only for local development)
+find_feature_extraction_binary = None
+_openface_env = None
 try:
-    # For diagnostics: discover OpenFace binary and surface status to UI
     from openface_bridge import find_feature_extraction_binary
-    # For preflight: provide OpenFace runtime env (DYLD_LIBRARY_PATH augmentation)
-    try:
-        from openface_bridge import _augmented_env as _openface_env
-    except Exception:
-        _openface_env = None
-except Exception:
-    find_feature_extraction_binary = None
-    _openface_env = None
+    from openface_bridge import _augmented_env as _openface_env
+except ImportError:
+    pass  # OpenFace not available (expected in cloud)
 
-# Optional: py-feat backend diagnostics
+# Optional: py-feat backend diagnostics and canonical AU names
 try:
     from pyfeat_bridge import check_backend as pyfeat_check
+    try:
+        from pyfeat_bridge import AU_NAME_FULL as _AU_NAME_FULL
+        CANONICAL_AU_NAMES = list(_AU_NAME_FULL.values())
+    except Exception:
+        pyfeat_check = pyfeat_check
+        # Py-feat detects 20 AUs (AU27 not included)
+        CANONICAL_AU_NAMES = [
+            'AU01_Inner_Brow_Raiser','AU02_Outer_Brow_Raiser','AU04_Brow_Lowerer',
+            'AU05_Upper_Lid_Raiser','AU06_Cheek_Raiser','AU07_Lid_Tightener',
+            'AU09_Nose_Wrinkler','AU10_Upper_Lip_Raiser','AU11_Nasolabial_Deepener',
+            'AU12_Lip_Corner_Puller','AU14_Dimpler','AU15_Lip_Corner_Depressor','AU17_Chin_Raiser',
+            'AU20_Lip_Stretcher','AU23_Lip_Tightener','AU24_Lip_Pressor','AU25_Lips_Part',
+            'AU26_Jaw_Drop','AU28_Lip_Suck','AU43_Eyes_Closed'
+        ]
 except Exception:
     pyfeat_check = None
+    # Py-feat detects 20 AUs (AU27 not included)
+    CANONICAL_AU_NAMES = [
+        'AU01_Inner_Brow_Raiser','AU02_Outer_Brow_Raiser','AU04_Brow_Lowerer',
+        'AU05_Upper_Lid_Raiser','AU06_Cheek_Raiser','AU07_Lid_Tightener',
+        'AU09_Nose_Wrinkler','AU10_Upper_Lip_Raiser','AU11_Nasolabial_Deepener',
+        'AU12_Lip_Corner_Puller','AU14_Dimpler','AU15_Lip_Corner_Depressor','AU17_Chin_Raiser',
+        'AU20_Lip_Stretcher','AU23_Lip_Tightener','AU24_Lip_Pressor','AU25_Lips_Part',
+        'AU26_Jaw_Drop','AU28_Lip_Suck','AU43_Eyes_Closed'
+    ]
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
@@ -59,14 +70,52 @@ app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max file size
 app.config['SESSIONS_DIR'] = 'sessions'
 
 # Audio analyzer configuration
-app.config['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY')
-app.config['ALLOWED_EXTENSIONS'] = {'.mp3', '.wav', '.m4a', '.ogg', '.flac', '.aac'}
+app.config['GROQ_API_KEY'] = os.getenv('GROQ_API_KEY')
+print(f"[STARTUP] GROQ_API_KEY from env: {bool(os.getenv('GROQ_API_KEY'))}, in config: {bool(app.config.get('GROQ_API_KEY'))}")
+# Allowed audio extensions (include webm for microphone recording uploads)
+app.config['ALLOWED_EXTENSIONS'] = {'.mp3', '.wav', '.m4a', '.ogg', '.flac', '.aac', '.webm'}
 
-# Select face/emotion backend via env: 'openface' (default), 'pyfeat', or 'both'
-EMOTION_BACKEND = os.getenv('EMOTION_BACKEND', os.getenv('FACE_BACKEND', 'openface')).lower()
+# Select face/emotion backend: 'pyfeat' (cloud default), 'openface' (local only), 'worker' (ML worker service)
+EMOTION_BACKEND = os.getenv('EMOTION_BACKEND', 'pyfeat').lower()
+
+# ML Worker URL for remote py-feat analysis
+ML_WORKER_URL = os.getenv('ML_WORKER_URL', '')
+
+def _call_ml_worker(frame):
+    """Call ML worker service for AU analysis. Returns dict with aus, emotions."""
+    import base64
+    import io
+    import requests
+    from PIL import Image
+    
+    if not ML_WORKER_URL:
+        return None
+    
+    try:
+        # Convert frame to base64 JPEG
+        if len(frame.shape) == 3 and frame.shape[2] == 3:
+            frame = frame[:, :, ::-1]  # BGR to RGB
+        img = Image.fromarray(frame)
+        buffer = io.BytesIO()
+        img.save(buffer, format='JPEG', quality=80)
+        img_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        resp = requests.post(
+            f"{ML_WORKER_URL}/analyze",
+            json={'image': img_b64},
+            timeout=60
+        )
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception as e:
+        logging.warning(f"ML Worker error: {e}")
+    return None
 
 def _bridge_order():
     """Return list of bridge scripts in order to try based on EMOTION_BACKEND."""
+    # If backend is 'none', return empty list (audio-only mode for cloud)
+    if EMOTION_BACKEND in ('none', 'worker'):
+        return []
     root = os.path.abspath(os.path.dirname(__file__))
     of = os.path.join(root, 'openface_bridge.py')
     pf = os.path.join(root, 'pyfeat_bridge.py')
@@ -230,7 +279,16 @@ def _compute_emotion_summary_and_segments(timeline, min_conf: float = 0.15, neut
     return summary, segments
 
 # Keep a short history of recent emotion predictions to stabilize output
-recent_predictions = deque(maxlen=12)
+emotion_history = deque(maxlen=12)
+
+# The audio blueprint is no longer needed as logic is integrated directly
+# try:
+#     from audio_analyzer.routes import audio_bp
+#     app.register_blueprint(audio_bp, url_prefix='/audio')
+# except ImportError as e:
+#     app.logger.warning(f"Could not import or register audio blueprint: {e}")
+#     # Define a placeholder if import fails, so app doesn't crash
+#     audio_bp = None
 
 # Background analysis pipeline (decouple heavy analysis from streaming loop)
 analysis_queue = deque(maxlen=1)
@@ -249,19 +307,19 @@ AU_EMOTION_RULES = {
     "anger": {"required": ["AU04", "AU05", "AU07", "AU23"], "optional": [], "forbidden": []},
     "disgust": {"required": ["AU09", "AU10"], "optional": ["AU15"], "forbidden": ["AU12"]},
 }
-AU_INTENSITY_THRESHOLD = 0.15  # Min intensity to consider an AU 'active'
+AU_INTENSITY_THRESHOLD = 0.12  # Min intensity to consider an AU 'active' (slightly relaxed)
 MIN_REQUIRED_AUS_FOR_EMOTION = 1 # Min number of required AUs to trigger an emotion
 
 # --- Emotion Analysis Helpers ---
 
 def get_emotion_from_aus(processed_aus):
     """
-    Determines the dominant emotion based on active Action Units using a rule-based mapping.
-    This provides a more 'scientifically credible' emotion label than relying
-    on the direct output of a single classifier.
+    Determines emotions from active Action Units using rule-based mapping.
+    Returns (best_emotion, best_confidence, detected_emotions_dict).
+    detected_emotions_dict contains scores for all emotions that meet the rule, not just the best.
     """
     if not processed_aus:
-        return 'Neutral', 0.0
+        return 'Neutral', 0.0, {}
 
     active_aus = {k: v for k, v in processed_aus.items() if v > AU_INTENSITY_THRESHOLD}
     detected_emotions = {}
@@ -277,14 +335,13 @@ def get_emotion_from_aus(processed_aus):
             continue
 
         # Check for required AUs
-        required_found_count = 0
         active_required_aus_intensities = []
         for au_code in rules.get('required', []):
             for key, intensity in active_aus.items():
                 if key.startswith(au_code + '_') or key == au_code:
-                    active_required_aus_intensities.append(intensity)
+                    active_required_aus_intensities.append(float(intensity))
                     break  # Found a match for this required AU, move to the next one
-        
+
         required_found_count = len(active_required_aus_intensities)
 
         # Check if the minimum number of required AUs are active
@@ -292,14 +349,14 @@ def get_emotion_from_aus(processed_aus):
             # Simple average confidence of active AUs
             total_confidence = sum(active_required_aus_intensities)
             avg_confidence = total_confidence / required_found_count if required_found_count > 0 else 0.0
-            detected_emotions[emotion] = avg_confidence
+            detected_emotions[emotion] = max(0.0, min(1.0, avg_confidence))
 
     if not detected_emotions:
-        return 'Neutral', 0.0
+        return 'Neutral', 0.0, {}
 
     # Return the emotion with the highest average confidence among detected ones
     best_emotion = max(detected_emotions, key=detected_emotions.get)
-    return best_emotion, detected_emotions[best_emotion]
+    return best_emotion.capitalize() if best_emotion.lower() != 'neutral' else 'Neutral', float(detected_emotions[best_emotion]), detected_emotions
 
 
 def smooth_emotion(new_emotion, new_confidence):
@@ -341,6 +398,39 @@ def process_frame_realtime(frame):
     global current_realtime_data, current_timeline
     
     try:
+        # If using ML Worker backend, call it directly via HTTP
+        if EMOTION_BACKEND == 'worker' and ML_WORKER_URL:
+            worker_result = _call_ml_worker(frame)
+            if worker_result and worker_result.get('success'):
+                if worker_result.get('face_detected'):
+                    aus = worker_result.get('aus', {})
+                    emotions = worker_result.get('emotions', {})
+                    
+                    # Update realtime data
+                    current_realtime_data['action_units'] = aus
+                    current_realtime_data['frame_count'] = current_realtime_data.get('frame_count', 0) + 1
+                    
+                    # Find dominant emotion
+                    if emotions:
+                        dom_emo = max(emotions, key=emotions.get)
+                        dom_conf = emotions[dom_emo]
+                        current_realtime_data['emotion'] = dom_emo.capitalize()
+                        
+                        # Add to timeline
+                        elapsed = current_realtime_data.get('elapsed', 0)
+                        current_timeline.append({
+                            't': elapsed,
+                            'label': dom_emo.capitalize(),
+                            'confidence': dom_conf,
+                            'quality': 1.0,
+                            'scores': emotions,
+                            'aus': aus
+                        })
+                else:
+                    current_realtime_data['emotion'] = 'No Face'
+                    current_realtime_data['action_units'] = {}
+            return
+        
         # Save frame temporarily for analysis
         temp_frame = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
         cv2.imwrite(temp_frame.name, frame)
@@ -432,13 +522,20 @@ def process_frame_realtime(frame):
                         # Fallbacks if a dict is provided: try mean_confidence or detection_rate
                         landmark_quality = float(quality_raw.get('mean_confidence', 0.0) or 0.0)
                     
-                    # Process AUs to get mean values
+                    # Process AUs to get mean values (ensure all canonical AUs present)
                     processed_aus = {}
                     for au_name, au_data in action_units.items():
                         if isinstance(au_data, dict) and 'mean' in au_data:
                             processed_aus[au_name] = au_data['mean']
                         elif isinstance(au_data, (int, float)):
                             processed_aus[au_name] = au_data
+                    # Fill missing AUs with 0.0 so visualizations can render all rows/series efficiently
+                    try:
+                        for au_full in CANONICAL_AU_NAMES:
+                            if au_full not in processed_aus:
+                                processed_aus[au_full] = 0.0
+                    except Exception:
+                        pass
                     
                     # Get dominant emotion - DEPRECATED direct classifier output
                     # dominant_emotion = 'Neutral'
@@ -453,22 +550,21 @@ def process_frame_realtime(frame):
                     #         all_scores = emotions.get('all_scores')
                     
                     # NEW: Get emotion from AU rules for higher accuracy
-                    dominant_emotion, emotion_confidence = get_emotion_from_aus(processed_aus)
-                    
-                    # The AU->Emotion engine returns labels like "sadness", but the frontend charts
-                    # are keyed by these lowercase labels. The raw scores from the original model
-                    # might use different keys. We'll build a new score dictionary based on our
-                    # rule engine's output to ensure consistency.
+                    dominant_emotion, emotion_confidence, detected = get_emotion_from_aus(processed_aus)
+
+                    # Build a comprehensive score dictionary for all 7 emotions
                     all_scores = {
-                        "happiness": 0.0, "sadness": 0.0, "surprise": 0.0, 
+                        "happiness": 0.0, "sadness": 0.0, "surprise": 0.0,
                         "anger": 0.0, "fear": 0.0, "disgust": 0.0, "neutral": 0.0
                     }
-                    # If our engine detected an emotion, set its score.
-                    # Otherwise, it's neutral.
-                    if dominant_emotion != 'Neutral':
-                        all_scores[dominant_emotion.lower()] = emotion_confidence
-                    else:
-                        all_scores["neutral"] = emotion_confidence
+                    # Populate scores for all detected emotions
+                    for emo, score in (detected or {}).items():
+                        key = str(emo).lower()
+                        if key in all_scores:
+                            all_scores[key] = float(max(0.0, min(1.0, score)))
+                    # Set neutral as residual confidence (1 - max other), but not below 0
+                    max_other = max([v for k, v in all_scores.items() if k != 'neutral'] or [0.0])
+                    all_scores['neutral'] = max(0.0, 1.0 - max_other)
 
                     # Gate by quality to reduce residual false positives
                     if landmark_quality < 0.25: # Relaxed quality gate
@@ -567,22 +663,38 @@ def _ensure_analysis_thread():
 def analyze_audio():
     """Handle audio analysis - preserving existing functionality"""
     try:
-        if 'audio_file' in request.files:
-            # File upload analysis
-            audio_file = request.files['audio_file']
-            if audio_file.filename != '':
-                filename = secure_filename(audio_file.filename)
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                audio_file.save(filepath)
-                
-                _proc = _get_process_audio_file()
-                if not _proc:
-                    return jsonify({'success': False, 'error': 'Audio analysis stack not installed. Install optional deps from requirements-audio.txt.'}), 503
-                result = _proc(filepath)
-                os.remove(filepath)  # Clean up
-                return jsonify({'success': True, 'result': result})
+        # Debug: Log API key presence
+        groq_key = app.config.get('GROQ_API_KEY')
+        print(f"[DEBUG] GROQ_API_KEY present: {bool(groq_key)}, length: {len(groq_key) if groq_key else 0}")
         
-        elif 'recording_data' in request.json:
+        # Accept both 'audio_file' (frontend upload) and 'audio' (legacy)
+        upload = None
+        if 'audio_file' in request.files:
+            upload = request.files['audio_file']
+        elif 'audio' in request.files:
+            upload = request.files['audio']
+
+        if upload:
+            # File upload analysis
+            if upload.filename and upload.filename.strip():
+                filename = secure_filename(upload.filename)
+                os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                upload.save(filepath)
+                try:
+                    # Use the integrated audio processor
+                    result = process_audio_file(filepath, app.config)
+                    print(f"[DEBUG] process_audio_file result: {result}")
+                    return jsonify({'success': True, 'result': result})
+                finally:
+                    try:
+                        os.remove(filepath)
+                    except Exception:
+                        pass
+        
+        # Real-time recording analysis (placeholder for now)
+        data = request.get_json(silent=True) or {}
+        if 'recording_data' in data:
             # Real-time recording analysis - simplified for demo
             return jsonify({
                 'success': True, 
@@ -700,13 +812,33 @@ def generate_video_feed(device_index: int = 0):
                 # Lazily initialize the writer using the first valid frame to avoid backend segfaults
                 if video_writer is None:
                     try:
-                        fourcc = cv2.VideoWriter_fourcc(*'MJPG')
                         h, w = frame.shape[:2]
-                        video_writer = cv2.VideoWriter(video_file_path, fourcc, 20, (w, h))
+                        # Try H.264 codec first (most compatible), fallback to MJPG
+                        try:
+                            fourcc = cv2.VideoWriter_fourcc(*'avc1')  # H.264
+                            video_writer = cv2.VideoWriter(video_file_path, fourcc, 20, (w, h))
+                            if not video_writer.isOpened():
+                                raise Exception("H.264 (avc1) failed to open")
+                            print(f"VideoWriter initialized with H.264 codec: {w}x{h} @ 20fps")
+                        except:
+                            # Fallback to MJPG (most reliable)
+                            try:
+                                fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+                                video_writer = cv2.VideoWriter(video_file_path, fourcc, 20, (w, h))
+                                if not video_writer.isOpened():
+                                    raise Exception("MJPG codec failed")
+                                print(f"VideoWriter initialized with MJPG codec: {w}x{h} @ 20fps")
+                            except:
+                                # Last resort: use default codec (-1)
+                                video_writer = cv2.VideoWriter(video_file_path, -1, 20, (w, h))
+                                if not video_writer.isOpened():
+                                    raise Exception("Default codec also failed")
+                                print(f"VideoWriter initialized with default codec: {w}x{h} @ 20fps")
                     except Exception as _e:
                         print(f"VideoWriter init error: {_e}")
                         video_writer = None
-                if video_writer is not None:
+                
+                if video_writer is not None and video_writer.isOpened():
                     try:
                         video_writer.write(frame)
                         recorded_frames += 1
@@ -733,9 +865,87 @@ def generate_video_feed(device_index: int = 0):
     finally:
         cap.release()
 
+@app.route('/analyze_browser_frame', methods=['POST'])
+def analyze_browser_frame():
+    """
+    Analyze a frame sent from browser webcam.
+    Expects JSON: {"image": "<base64 jpeg>"}
+    Returns AU and emotion data.
+    """
+    global current_realtime_data, current_timeline
+    
+    # Read ML_WORKER_URL at request time (not module load time)
+    ml_worker_url = os.getenv('ML_WORKER_URL', '')
+    emotion_backend = os.getenv('EMOTION_BACKEND', 'pyfeat').lower()
+    
+    try:
+        data = request.get_json()
+        if not data or 'image' not in data:
+            return jsonify({'success': False, 'error': 'No image provided'}), 400
+        
+        # If using ML Worker backend
+        if emotion_backend == 'worker' and ml_worker_url:
+            import requests as req
+            try:
+                resp = req.post(
+                    f"{ml_worker_url}/analyze",
+                    json={'image': data['image']},
+                    timeout=60
+                )
+                if resp.status_code == 200:
+                    result = resp.json()
+                    if result.get('success') and result.get('face_detected'):
+                        aus = result.get('aus', {})
+                        emotions = result.get('emotions', {})
+                        
+                        # Update realtime data
+                        current_realtime_data['action_units'] = aus
+                        current_realtime_data['frame_count'] = current_realtime_data.get('frame_count', 0) + 1
+                        
+                        # Find dominant emotion
+                        dom_emo = 'Neutral'
+                        dom_conf = 0.0
+                        if emotions:
+                            dom_emo = max(emotions, key=emotions.get)
+                            dom_conf = emotions[dom_emo]
+                        
+                        current_realtime_data['emotion'] = dom_emo.capitalize()
+                        
+                        return jsonify({
+                            'success': True,
+                            'face_detected': True,
+                            'aus': aus,
+                            'emotions': emotions,
+                            'dominant_emotion': dom_emo.capitalize(),
+                            'confidence': dom_conf
+                        })
+                    else:
+                        return jsonify({
+                            'success': True,
+                            'face_detected': False,
+                            'aus': {},
+                            'emotions': {}
+                        })
+                else:
+                    return jsonify({'success': False, 'error': f'ML Worker returned {resp.status_code}'}), 500
+            except Exception as e:
+                logging.error(f"ML Worker call failed: {e}")
+                return jsonify({'success': False, 'error': str(e)}), 500
+        
+        # Fallback: no ML worker configured
+        return jsonify({
+            'success': False,
+            'error': f'No ML backend configured. backend={emotion_backend}, url={ml_worker_url[:20] if ml_worker_url else "empty"}',
+            'backend': emotion_backend
+        }), 503
+        
+    except Exception as e:
+        logging.error(f"analyze_browser_frame error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/video_feed')
 def video_feed():
-    """Video streaming route"""
+    """Video streaming route - only works with server-side camera (local dev)"""
     # Allow selecting device index via query param
     try:
         device = int(request.args.get('device', '0'))
@@ -1138,8 +1348,8 @@ def get_recording_status():
 
 @app.route('/get_realtime_data')
 def get_realtime_data():
-    """Get real-time Action Units data from face analysis"""
-    global current_realtime_data, recording, start_time, duration
+    """Get real-time Action Units data and emotion timeline from face analysis"""
+    global current_realtime_data, recording, start_time, duration, current_timeline
     
     if not recording or not start_time:
         return jsonify({
@@ -1148,6 +1358,7 @@ def get_realtime_data():
             'action_units': {},
             'emotion': 'Neutral',
             'emotion_scores': None,
+            'timeline': [],
             'error': current_realtime_data.get('error')
         })
     
@@ -1157,28 +1368,24 @@ def get_realtime_data():
     # Use real data from current_realtime_data
     action_units = current_realtime_data.get('action_units', {})
     
-    # If no data available yet, return placeholder
-    if not action_units:
-        return jsonify({
-            'recording': True,
-            'elapsed': elapsed,
-            'progress': progress,
-            'action_units': {},
-            'emotion': 'Processing...',
-            'emotion_scores': None,
-            'error': current_realtime_data.get('error'),
-            'timestamp': time.time()
-        })
-    
-    # Extract Action Units values (convert from dict format if needed)
+    # Process AU values for response
     processed_aus = {}
     for au_name, au_data in action_units.items():
         if isinstance(au_data, dict):
-            # If it's a dict with mean/std/etc, use mean
             processed_aus[au_name] = au_data.get('mean', 0)
         else:
-            # If it's already a number
             processed_aus[au_name] = au_data
+    
+    # Get recent timeline data (last 60 seconds or entire session if shorter)
+    cutoff_time = elapsed - 60.0
+    recent_timeline = [entry for entry in current_timeline if entry.get('t', 0) >= cutoff_time]
+    
+    # If no recent data, include all
+    if not recent_timeline and current_timeline:
+        recent_timeline = current_timeline
+    
+    # Extract AU names and compute top ones
+    top_aus = sorted(processed_aus.items(), key=lambda x: x[1], reverse=True)[:8]
     
     return jsonify({
         'recording': True,
@@ -1186,14 +1393,199 @@ def get_realtime_data():
         'progress': progress,
         'action_units': processed_aus,
         'au_count': len(processed_aus),
+        'top_aus': dict(top_aus),  # Top 8 AUs for visualization
         'emotion': current_realtime_data.get('emotion', 'Neutral'),
         'emotion_confidence': current_realtime_data.get('emotion_confidence', 0),
         'emotion_scores': current_realtime_data.get('emotion_scores'),
         'landmark_quality': current_realtime_data.get('landmark_quality', None),
         'error': current_realtime_data.get('error'),
         'timestamp': time.time(),
-        'frame_count': current_realtime_data.get('frame_count', 0)
+        'frame_count': current_realtime_data.get('frame_count', 0),
+        # Timeline data for charting
+        'timeline': recent_timeline,
+        'timeline_length': len(recent_timeline)
     })
+
+@app.route('/get_session_summary')
+def get_session_summary():
+    """Get aggregated session summary: emotion distribution, AU statistics, mood changes"""
+    global current_timeline, current_realtime_data
+    
+    if not current_timeline:
+        return jsonify({
+            'success': False,
+            'error': 'No session data available',
+            'summary': {}
+        })
+    
+    try:
+        # Emotion distribution
+        emotion_counts = {}
+        emotion_confidences = {}
+        total_entries = len(current_timeline)
+        
+        for entry in current_timeline:
+            emotion = entry.get('label', 'Neutral')
+            confidence = entry.get('confidence', 0.0)
+            
+            emotion_counts[emotion] = emotion_counts.get(emotion, 0) + 1
+            if emotion not in emotion_confidences:
+                emotion_confidences[emotion] = []
+            emotion_confidences[emotion].append(confidence)
+        
+        # Calculate emotion stats
+        emotion_distribution = {}
+        emotion_avg_confidence = {}
+        for emotion, count in emotion_counts.items():
+            emotion_distribution[emotion] = count / total_entries if total_entries > 0 else 0
+            confs = emotion_confidences.get(emotion, [0])
+            emotion_avg_confidence[emotion] = sum(confs) / len(confs) if confs else 0
+        
+        # AU statistics (mean, max, variance)
+        au_stats = {}
+        all_aus = {}  # Collect all AU timeseries
+        
+        for entry in current_timeline:
+            aus = entry.get('aus', {})
+            if isinstance(aus, dict):
+                for au_name, au_value in aus.items():
+                    if au_name not in all_aus:
+                        all_aus[au_name] = []
+                    all_aus[au_name].append(au_value)
+        
+        # Compute statistics for each AU
+        for au_name, au_values in all_aus.items():
+            if au_values:
+                au_stats[au_name] = {
+                    'mean': sum(au_values) / len(au_values),
+                    'max': max(au_values),
+                    'min': min(au_values),
+                    'count': len(au_values)
+                }
+        
+        # Mood change count (transitions between different emotions)
+        mood_changes = 0
+        prev_emotion = None
+        for entry in current_timeline:
+            emotion = entry.get('label', 'Neutral')
+            if prev_emotion is not None and prev_emotion != emotion:
+                mood_changes += 1
+            prev_emotion = emotion
+        
+        # Quality metrics
+        quality_scores = [entry.get('quality', 0) for entry in current_timeline]
+        avg_quality = sum(quality_scores) / len(quality_scores) if quality_scores else 0
+        low_quality_count = sum(1 for q in quality_scores if q < 0.3)
+        
+        # Dominant emotion
+        dominant_emotion = max(emotion_distribution.items(), key=lambda x: x[1])[0] if emotion_distribution else 'Neutral'
+        
+        # Time range
+        if current_timeline:
+            duration_secs = current_timeline[-1].get('t', 0) - current_timeline[0].get('t', 0)
+        else:
+            duration_secs = 0
+        
+        summary = {
+            'emotion_distribution': emotion_distribution,
+            'emotion_avg_confidence': emotion_avg_confidence,
+            'dominant_emotion': dominant_emotion,
+            'au_statistics': au_stats,
+            'mood_changes': mood_changes,
+            'total_frames': total_entries,
+            'average_quality': avg_quality,
+            'low_quality_frames': low_quality_count,
+            'duration_seconds': round(duration_secs, 2),
+            'top_aus_overall': dict(sorted(
+                [(name, stats['mean']) for name, stats in au_stats.items()],
+                key=lambda x: x[1],
+                reverse=True
+            )[:10])
+        }
+        
+        return jsonify({
+            'success': True,
+            'summary': summary,
+            'timestamp': time.time()
+        })
+    
+    except Exception as e:
+        import traceback
+        print(f"Session summary error: {e}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'summary': {}
+        })
+
+@app.route('/get_timeline_export')
+def get_timeline_export():
+    """Export timeline data as CSV for analysis"""
+    global current_timeline
+    
+    if not current_timeline:
+        return jsonify({
+            'success': False,
+            'error': 'No timeline data to export'
+        }), 404
+    
+    try:
+        # Create CSV-like data
+        csv_data = "time_s,emotion,confidence,quality"
+        
+        # Add all emotion keys if they exist
+        all_emotion_keys = set()
+        all_au_keys = set()
+        for entry in current_timeline:
+            if isinstance(entry.get('scores'), dict):
+                all_emotion_keys.update(entry['scores'].keys())
+            if isinstance(entry.get('aus'), dict):
+                all_au_keys.update(entry['aus'].keys())
+        
+        # Build CSV header
+        for key in sorted(all_emotion_keys):
+            csv_data += f",emotion_score_{key}"
+        for key in sorted(all_au_keys):
+            csv_data += f",au_{key}"
+        
+        csv_data += "\n"
+        
+        # Add data rows
+        for entry in current_timeline:
+            t = entry.get('t', 0)
+            emotion = entry.get('label', 'Neutral')
+            conf = entry.get('confidence', 0)
+            quality = entry.get('quality', 0)
+            
+            csv_data += f"{t},{emotion},{conf:.3f},{quality:.3f}"
+            
+            # Add emotion scores
+            scores = entry.get('scores', {})
+            for key in sorted(all_emotion_keys):
+                score = scores.get(key, 0) if isinstance(scores, dict) else 0
+                csv_data += f",{score:.3f}"
+            
+            # Add AU values
+            aus = entry.get('aus', {})
+            for key in sorted(all_au_keys):
+                au_val = aus.get(key, 0) if isinstance(aus, dict) else 0
+                csv_data += f",{au_val:.3f}"
+            
+            csv_data += "\n"
+        
+        # Return as downloadable file
+        return Response(
+            csv_data,
+            mimetype="text/csv",
+            headers={"Content-Disposition": "attachment;filename=emotion_au_timeline.csv"}
+        )
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @app.route('/face_backend_status')
 def face_backend_status():
@@ -1376,6 +1768,206 @@ def upload_video():
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
+# =================================================================
+# Audio Analysis - Integrated
+# =================================================================
+
+class AudioAnalyzer:
+    """Main class for audio analysis operations using Groq API"""
+    
+    def __init__(self, app_config):
+        self.config = app_config
+        # Try config first, then fall back to direct env var read
+        groq_key = self.config.get('GROQ_API_KEY') or os.getenv('GROQ_API_KEY')
+        print(f"[DEBUG AudioAnalyzer] groq_key present: {bool(groq_key)}, len={len(groq_key) if groq_key else 0}")
+        try:
+            self.groq_client = Groq(api_key=groq_key) if groq_key else None
+            print(f"[DEBUG AudioAnalyzer] groq_client created: {bool(self.groq_client)}")
+        except Exception as e:
+            print(f"[DEBUG AudioAnalyzer] Groq client error: {e}")
+            self.groq_client = None
+        # Dev fallback flag: enable if no Groq key or when AUDIO_DEV_MODE is truthy
+        self.dev_mode = (not groq_key) or (str(os.getenv('AUDIO_DEV_MODE', '0')).lower() in ('1','true','yes'))
+        print(f"[DEBUG AudioAnalyzer] dev_mode: {self.dev_mode}")
+
+    def _dev_fallback_analysis(self, transcript: Optional[str]) -> dict:
+        t = transcript or "This is a sample transcription used in development mode."
+        return {
+            "transcript": t,
+            "primary_emotion": "Calm",
+            "secondary_emotions": ["Content"],
+            "mood_category": "Neutral",
+            "energy_level": "Medium",
+            "tone": "Casual",
+            "confidence": 0.72,
+            "stress_indicators": ["Even pace"],
+            "emotional_intensity": 0.35,
+            "key_phrases": ["demo output", "dev mode"],
+            "overall_vibe": "Steady and neutral with mild positivity.",
+            "explanation": "Development fallback: returning a mocked analysis due to missing API or quota limits."
+        }
+    
+    def transcribe_with_groq(self, audio_path: str) -> str:
+        """Uses Groq Whisper to transcribe audio files."""
+        if not self.groq_client:
+            if self.dev_mode:
+                return "Development mode transcription placeholder."
+            raise ValueError("Groq API key missing. Set GROQ_API_KEY for audio transcription.")
+
+        try:
+            with open(audio_path, "rb") as audio_file:
+                response = self.groq_client.audio.transcriptions.create(
+                    model="whisper-large-v3",
+                    file=audio_file
+                )
+            return response.text
+        except Exception as e:
+            msg = str(e).lower()
+            if 'quota' in msg or '429' in msg or 'rate' in msg:
+                return "Development mode transcription (quota exceeded)."
+            if self.dev_mode:
+                return "Development mode transcription (error fallback)."
+            raise
+    
+    def analyze_emotions(self, transcript: str) -> dict:
+        """Analyzes emotions and mood from transcript using Groq."""
+        system_prompt = self._get_emotion_analysis_prompt()
+        user_message = f"Transcript:\n\n{transcript}\n\nProvide comprehensive emotional analysis."
+        
+        if not self.groq_client:
+            if self.dev_mode:
+                return self._dev_fallback_analysis(transcript)
+            raise ValueError("Groq API key missing. Set GROQ_API_KEY for audio analysis.")
+
+        try:
+            response = self.groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                temperature=0.3
+            )
+            text = response.choices[0].message.content
+            return self._parse_emotion_response(text, transcript)
+        except Exception as e:
+            msg = str(e).lower()
+            if 'quota' in msg or '429' in msg or 'rate' in msg:
+                return self._dev_fallback_analysis(transcript)
+            if self.dev_mode:
+                return self._dev_fallback_analysis(transcript)
+            raise
+
+    def _get_emotion_analysis_prompt(self) -> str:
+        """Returns the system prompt for emotion analysis"""
+        return """You are an expert AI audio analyst. Analyze the provided transcript and return a JSON object with these fields:
+- transcript: The original text
+- primary_emotion: Main emotion (e.g., "Happy", "Sad", "Angry", "Calm")
+- secondary_emotions: List of up to 2 other emotions
+- mood_category: Overall mood ("Positive", "Negative", "Neutral", "Mixed")
+- energy_level: "High", "Medium", or "Low"
+- tone: Communication tone (e.g., "Formal", "Casual", "Professional")
+- confidence: Float 0.0-1.0
+- stress_indicators: List of stress signs
+- emotional_intensity: Float 0.0-1.0
+- key_phrases: List of 2-3 key phrases
+- overall_vibe: One-sentence summary
+- explanation: Brief justification with specific examples
+
+Return ONLY valid JSON."""
+
+    def _parse_emotion_response(self, text: str, original_transcript: str) -> dict:
+        """Parse Groq response and return structured emotion data"""
+        try:
+            result = json.loads(text)
+            # Always ensure transcript is included
+            if 'transcript' not in result or not result['transcript']:
+                result['transcript'] = original_transcript
+            return result
+        except json.JSONDecodeError:
+            # Try to extract JSON block
+            start = text.find("{")
+            end = text.rfind("}")
+            if start != -1 and end != -1 and end > start:
+                try:
+                    result = json.loads(text[start:end+1])
+                    # Always ensure transcript is included
+                    if 'transcript' not in result or not result['transcript']:
+                        result['transcript'] = original_transcript
+                    return result
+                except json.JSONDecodeError:
+                    pass
+            
+            # Fallback to basic structure
+            return {
+                "transcript": original_transcript,
+                "primary_emotion": "Unknown",
+                "secondary_emotions": [],
+                "mood_category": "Unknown",
+                "energy_level": "Unknown",
+                "tone": "Unknown",
+                "confidence": 0.0,
+                "stress_indicators": [],
+                "emotional_intensity": 0.0,
+                "key_phrases": [],
+                "overall_vibe": "Could not analyze",
+                "explanation": "Failed to parse emotion analysis response"
+            }
+
+def process_audio_file(filepath: str, app_config) -> dict:
+    """
+    Orchestrates the full audio analysis pipeline using Groq.
+    """
+    analyzer = AudioAnalyzer(app_config)
+
+    # Prepare audio (optional resample/convert to 16k mono WAV using pydub if available)
+    prepped_path = filepath
+    tmp_to_cleanup = None
+
+    def _prepare_audio_file(path: str) -> str:
+        nonlocal tmp_to_cleanup
+        try:
+            from pydub import AudioSegment  # optional
+            # Load any input format and convert
+            seg = AudioSegment.from_file(path)
+            seg = seg.set_frame_rate(16000).set_channels(1).set_sample_width(2)
+            fd, outpath = tempfile.mkstemp(suffix='.wav')
+            os.close(fd)
+            seg.export(outpath, format='wav')
+            tmp_to_cleanup = outpath
+            return outpath
+        except Exception:
+            return path
+
+    prepped_path = _prepare_audio_file(filepath)
+
+    try:
+        # 1. Transcribe audio using Groq
+        transcript = analyzer.transcribe_with_groq(prepped_path)
+
+        # 2. Analyze emotions from transcript using Groq
+        analysis = analyzer.analyze_emotions(transcript)
+
+        return analysis
+
+    except ValueError as e:
+        # Handle specific errors like missing API keys or quota issues gracefully
+        return {"error": str(e)}
+    except Exception as e:
+        # Catch-all for other unexpected errors
+        return {"error": f"An unexpected error occurred: {e}"}
+    finally:
+        if tmp_to_cleanup and os.path.exists(tmp_to_cleanup):
+            try:
+                os.remove(tmp_to_cleanup)
+            except Exception:
+                pass
+
+
+# =================================================================
+# App setup and routes
+# =================================================================
 
 # --- Globals ---
 video_writer = None

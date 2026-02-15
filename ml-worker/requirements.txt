@@ -1,0 +1,16 @@
+# Lightweight ML Worker - PyTorch only (~800MB vs ~1.5GB)
+# Removed TensorFlow to save ~500MB
+# Uses AU-based emotion inference (no separate emotion model needed)
+flask==3.0.0
+gunicorn==21.2.0
+pillow>=10.0.0
+numpy>=1.24.0
+
+# Face detection (MTCNN)
+facenet-pytorch>=2.5.3
+torch>=2.0.0
+torchvision>=0.15.0
+
+# AU estimation via facial landmarks (emotions inferred from AUs)
+mediapipe>=0.10.0
+opencv-python-headless>=4.8.0

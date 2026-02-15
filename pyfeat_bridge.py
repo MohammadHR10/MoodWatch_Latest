@@ -26,16 +26,21 @@ AU_NAME_FULL = {
     'AU07': 'AU07_Lid_Tightener',
     'AU09': 'AU09_Nose_Wrinkler',
     'AU10': 'AU10_Upper_Lip_Raiser',
+    'AU11': 'AU11_Nasolabial_Deepener',
     'AU12': 'AU12_Lip_Corner_Puller',
     'AU14': 'AU14_Dimpler',
     'AU15': 'AU15_Lip_Corner_Depressor',
     'AU17': 'AU17_Chin_Raiser',
     'AU20': 'AU20_Lip_Stretcher',
     'AU23': 'AU23_Lip_Tightener',
+    'AU24': 'AU24_Lip_Pressor',
     'AU25': 'AU25_Lips_Part',
     'AU26': 'AU26_Jaw_Drop',
-    'AU27': 'AU27_Mouth_Stretch',
+    # AU27 not detected by py-feat
+    'AU28': 'AU28_Lip_Suck',
+    'AU43': 'AU43_Eyes_Closed',
 }
+# Note: py-feat detects 20 AUs (AU27_Mouth_Stretch is not included)
 
 EMO_LABEL_MAP = {
     'happiness': 'happiness',
@@ -56,11 +61,33 @@ def _load_detector():
         from feat import Detector
     except Exception as e:
         raise RuntimeError(f"py-feat not installed or import failed: {e}")
-    # Configure with robust defaults and layered fallbacks for older py-feat versions
-    # Tier 1: retinaface + mobilefacenet + xgb + resmasknet
+
+    # Try explicit full configuration first (most reliable)
+    try:
+        det = Detector(
+            face_model="retinaface",
+            landmark_model="mobilefacenet",
+            au_model="xgb",
+            emotion_model="resmasknet",
+            facepose_model="img2pose",
+            device="cpu"
+        )
+        return det
+    except Exception as e:
+        print(f"Explicit config failed: {e}", file=sys.stderr)
+
+    # Tier 1: Defaults chosen by py-feat (most compatible across versions)
+    try:
+        det = Detector(device="cpu")
+        return det
+    except Exception as e:
+        print(f"Default config failed: {e}", file=sys.stderr)
+        pass
+
+    # Tier 2: Explicit recommended configuration
     try:
         return Detector(
-            face_model="retinaface",
+            face_model="img2pose",
             landmark_model="mobilefacenet",
             au_model="xgb",
             emotion_model="resmasknet",
@@ -68,49 +95,24 @@ def _load_detector():
         )
     except Exception:
         pass
-    # Tier 2: retinaface + mobilefacenet + rf + resmasknet
+
+    # Tier 3: Conservative fallback
     try:
         return Detector(
             face_model="retinaface",
-            landmark_model="mobilefacenet",
-            au_model="rf",
-            emotion_model="resmasknet",
+            au_model="svm",
             device="cpu",
         )
-    except Exception:
-        pass
-    # Tier 3: mediapipe (widely available) + rf; emotion model best-effort
-    try:
-        return Detector(
-            face_model="mediapipe",
-            landmark_model="mobilefacenet",
-            au_model="rf",
-            emotion_model="resmasknet",
-            device="cpu",
-        )
-    except Exception:
-        # Final fallback minimal config
-        return Detector(
-            face_model="mediapipe",
-            au_model="rf",
-            device="cpu",
-        )
-    return det
+    except Exception as e:
+        raise RuntimeError(f"Could not initialize py-feat detector: {e}")
 
 
 def _read_and_preprocess(image_path: Path):
-    # Load and apply light normalization (LAB histogram equalization)
+    # Load image - py-feat works better with RGB color space directly
     img = cv2.imread(str(image_path))
     if img is None:
         raise RuntimeError('Failed to read image')
-    try:
-        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-        l, a, b = cv2.split(lab)
-        l = cv2.equalizeHist(l)
-        lab = cv2.merge((l, a, b))
-        img = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
-    except Exception:
-        pass
+    # Don't preprocess - let py-feat handle it internally for better face detection
     return img
 
 
@@ -121,21 +123,9 @@ def analyze_with_pyfeat(image_path: Path):
         return { 'error': str(e) }
 
     try:
-        # Detect on preprocessed image; some py-feat versions expect a file-like/path
-        # for detect_image. To be compatible across versions, write a temp PNG and pass its path.
-        img = _read_and_preprocess(image_path)
-        import tempfile
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-        try:
-            cv2.imwrite(tmp.name, img)
-            tmp.flush()
-            tmp.close()
-            fex = det.detect_image(tmp.name)
-        finally:
-            try:
-                os.unlink(tmp.name)
-            except Exception:
-                pass
+        # Pass image path directly to py-feat for best face detection
+        # py-feat internally handles preprocessing and color conversion
+        fex = det.detect_image(str(image_path))
     except Exception as e:
         return { 'error': f"py-feat detection failed: {e}" }
 
@@ -145,18 +135,15 @@ def analyze_with_pyfeat(image_path: Path):
 
         row = fex.iloc[0]
 
-        # Extract AU intensities (columns often like AU01, AU02, ...)
+        # Extract AU intensities (columns like AU01, AU02, ...)
         aus = {}
         for short, full in AU_NAME_FULL.items():
-            val = row.get(short)
-            if val is None:
-                # Some versions use intensity suffixes; try alternatives
-                val = row.get(f"{short}_r") or row.get(f"{short}_intensity")
+            val = row.get(short)  # direct column access
             try:
                 v = float(val) if val is not None else 0.0
                 if np.isnan(v):
                     v = 0.0
-                # Py-Feat intensities typically in 0..1 already; clamp
+                # Py-Feat intensities typically in 0..1 already; clamp for safety
                 v = max(0.0, min(1.0, v))
             except Exception:
                 v = 0.0

@@ -1,0 +1,74 @@
+# Git
+
+.git
+.gitignore
+
+# Python
+
+**pycache**
+_.py[cod]
+_$py.class
+_.so
+.Python
+.env
+.venv
+venv/
+ENV/
+env.bak/
+venv.bak/
+.eggs/
+_.egg-info/
+dist/
+build/
+
+# IDE
+
+.vscode/
+.idea/
+_.swp
+_.swo
+.DS_Store
+
+# Project specific - not needed in cloud
+
+OpenFace/
+processed/
+sessions/
+uploads/
+baselines/
+archived_processed/
+scripts/
+
+# Test files
+
+test\__.py
+_\_test.py
+
+# Documentation (not needed at runtime)
+
+\*.md
+!README.md
+
+# Old/deprecated files
+
+_\_old_
+mediapipe*bridge.py
+openface_bridge.py
+video_interface\*.py
+streamlit*_.py
+app*new.py
+app.py
+audio_interface.py
+debug*_.py
+train\_\*.py
+app/
+
+# Other
+
+_.csv
+_.json
+!baseline_stats.json
+_.log
+_.avi
+_.mp4
+_.webm
