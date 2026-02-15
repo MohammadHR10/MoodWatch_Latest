@@ -1,6 +1,6 @@
-# VoiceVibe - AI Audio & Video Mood Analyzer
+# MoodWatch - AI Audio & Video Mood Analyzer
 
-VoiceVibe is an AI-powered multimodal analysis tool that transcribes speech, identifies different speakers, and performs comprehensive emotional analysis on both audio and video content.
+MoodWatch is an AI-powered multimodal analysis tool that transcribes speech, identifies different speakers, and performs comprehensive emotional analysis on both audio and video content.
 
 ![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)
 ![Flask](https://img.shields.io/badge/Flask-3.0-green.svg)
@@ -25,7 +25,7 @@ VoiceVibe is an AI-powered multimodal analysis tool that transcribes speech, ide
 ## Project Structure
 
 ```
-voicevibe/
+moodwatch/
 ├── flask_app.py          # Main Flask application
 ├── config.py             # Configuration settings
 ├── pyfeat_bridge.py      # Py-Feat facial analysis bridge
@@ -105,7 +105,7 @@ voicevibe/
 
 ### Groq API Key (Required)
 
-VoiceVibe uses Groq for fast audio transcription and emotion analysis:
+MoodWatch uses Groq for fast audio transcription and emotion analysis:
 
 1. Go to [Groq Console](https://console.groq.com/keys)
 2. Create a free account (no credit card required)
@@ -195,7 +195,7 @@ Environment variables (set in `.env`):
 
 ## Emotional Analysis Output
 
-VoiceVibe provides comprehensive emotional analysis:
+MoodWatch provides comprehensive emotional analysis:
 
 | Field                 | Description                                       |
 | --------------------- | ------------------------------------------------- |

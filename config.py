@@ -1,5 +1,5 @@
 """
-Configuration settings for VoiceVibe Audio Analyzer
+Configuration settings for MoodWatch Audio Analyzer
 """
 import os
 from pathlib import Path
